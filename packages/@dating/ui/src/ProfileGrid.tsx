@@ -6,11 +6,8 @@ export interface GridUser {
   id: string
   name: string
   tgPhotoUrl?: string
-  isOwn?: boolean
   isInvisible?: boolean
   isOnline?: boolean
-  isSide?: boolean
-  position?: number
   updatedAt?: string
   distance: number
   openToMessages?: boolean
@@ -22,7 +19,8 @@ export interface GridUser {
   hasPhoto?: boolean
   gender?: string
   seekingGender?: string
-  role?: string
+  position?: number
+  preferences?: Record<string, string>
   tgUsername?: string
   [key: string]: any
 }
@@ -87,11 +85,9 @@ function GridTile({
     }
   }, [photo])
 
-  // Self always shows online dot. Others: visible if updated within 15 minutes.
+  // Online dot: visible if updated within 15 minutes
   const ONLINE_THRESHOLD_MS = 15 * 60 * 1000
-  const isActive = user.isOwn
-    ? true
-    : user.isOnline && user.updatedAt
+  const isActive = user.isOnline && user.updatedAt
     ? Date.now() - new Date(user.updatedAt).getTime() < ONLINE_THRESHOLD_MS
     : false
 
@@ -148,19 +144,10 @@ function GridTile({
       {/* App-specific top-left badge */}
       {renderTopLeft?.(user)}
 
-      {/* Own profile border */}
-      {user.isOwn && (
-        <div className="absolute inset-0 border-2 border-[#5AC8FA] rounded-lg pointer-events-none z-30" />
-      )}
-
       {/* Bottom info */}
       <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] pointer-events-none z-30 flex flex-col justify-end">
-        <p
-          className={`font-semibold text-[8px] leading-tight truncate ${
-            user.isOwn ? 'text-[#5AC8FA]' : 'text-white'
-          }`}
-        >
-          {user.isOwn ? 'You' : user.name}
+        <p className="font-semibold text-[8px] leading-tight truncate text-white">
+          {user.name}
         </p>
         {renderBottom(user)}
       </div>
@@ -239,18 +226,25 @@ export function ProfileGrid({
           )
         }
 
+        const isOwn = idx === 0
         return (
           <div
             key={user.id}
             className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
             style={{
-              borderColor: user.id === ownProfile.id ? '#5AC8FA' : 'transparent',
+              borderColor: isOwn ? '#5AC8FA' : 'transparent',
               opacity: matchingIds && !matchingIds.has(user.id) ? 0.25 : 1,
             }}
           >
+            {/* Own profile: force name to "You" */}
+            {isOwn && (
+              <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
+                <p className="text-[#5AC8FA] text-[8px] font-semibold px-[3px] pt-[1px]">You</p>
+              </div>
+            )}
             <GridTile
-              user={user}
-              onClick={() => (user.isOwn ? onViewOwnProfile() : onViewPhoto(user))}
+              user={isOwn ? { ...user, name: 'You' } : user}
+              onClick={() => (isOwn ? onViewOwnProfile() : onViewPhoto(user))}
               renderBottom={renderTileBottom}
               renderTopLeft={renderTileTopLeft}
               tileClassName={tileClassName}

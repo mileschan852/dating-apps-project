@@ -41,8 +41,7 @@ export function formatDist(d: number): string {
   return `${d.toFixed(1)}km`
 }
 
-export function isUserActive(user: { isOwn?: boolean; updatedAt?: string }): boolean {
-  if (user.isOwn) return true
+export function isUserActive(user: { updatedAt?: string }): boolean {
   if (!user.updatedAt) return false
   return Date.now() - new Date(user.updatedAt).getTime() < 15 * 60 * 1000
 }

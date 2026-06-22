@@ -57,7 +57,6 @@ export interface UserProfile {
   distance: number
   lat?: number
   lng?: number
-  isOwn?: boolean
   openToMessages: boolean
   updatedAt?: string
 

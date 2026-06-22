@@ -203,10 +203,6 @@ export function useNearbyRefresh({ tableName, lat, lng, getMyId, isInvisible, in
       const myId = getMyIdRef.current()
       const { isInvisible: inv, invisibleUntil: invUntil } = invisibleRef.current
       const mapped = dbUsers.filter(u => String(u.id) !== String(myId)).map(u => dbToProfile(u, lat, lng))
-      const ownIdx = mapped.findIndex(u => u.isOwn)
-      if (ownIdx >= 0) {
-        mapped[ownIdx] = { ...mapped[ownIdx], isInvisible: !!inv, invisibleUntil: invUntil || undefined }
-      }
       console.log('Nearby refresh:', mapped.length, 'users')
       setUsers(mapped)
       setIsLoading(false)
@@ -297,7 +293,7 @@ export function useGridUsers({
   filterFn,
 }: UseGridUsersOptions) {
   const patchedOwnProfile = useMemo(
-    () => ({ ...ownProfile, isOwn: true, isInvisible: isInvisible || false }),
+    () => ({ ...ownProfile, isInvisible: isInvisible || false }),
     [ownProfile, isInvisible]
   )
 
@@ -307,25 +303,25 @@ export function useGridUsers({
   )
 
   const visibleGridUsers = useMemo(
-    () => (isAdmin ? allGridUsers : allGridUsers.filter((u: UserProfile) => u.isOwn || !u.isInvisible)),
-    [isAdmin, allGridUsers]
+    () => (isAdmin ? allGridUsers : allGridUsers.filter((u: UserProfile) => u.id === ownProfile.id || !u.isInvisible)),
+    [isAdmin, allGridUsers, ownProfile.id]
   )
 
   const filteredGrid = useMemo(
     () =>
       visibleGridUsers
         .filter((u: UserProfile) => {
-          if (u.isOwn) return true
+          if (u.id === ownProfile.id) return true
           if (onlineOnly && !isUserActive(u)) return false
           if (u.tgUsername === '_test_') return false
           return filterFn(u)
         })
         .sort((a: UserProfile, b: UserProfile) => {
-          if (a.isOwn) return -1
-          if (b.isOwn) return 1
+          if (a.id === ownProfile.id) return -1
+          if (b.id === ownProfile.id) return 1
           return (a.distance || Infinity) - (b.distance || Infinity)
         }),
-    [visibleGridUsers, onlineOnly, filterFn]
+    [visibleGridUsers, onlineOnly, filterFn, ownProfile.id]
   )
 
   const matchingIds = useMemo(() => new Set(filteredGrid.map((u: UserProfile) => u.id)), [filteredGrid])
@@ -335,11 +331,11 @@ export function useGridUsers({
       visibleGridUsers
         .filter((u: UserProfile) => !matchingIds.has(u.id))
         .sort((a: UserProfile, b: UserProfile) => {
-          if (a.isOwn) return -1
-          if (b.isOwn) return 1
+          if (a.id === ownProfile.id) return -1
+          if (b.id === ownProfile.id) return 1
           return (a.distance || Infinity) - (b.distance || Infinity)
         }),
-    [visibleGridUsers, matchingIds]
+    [visibleGridUsers, matchingIds, ownProfile.id]
   )
 
   const sortedUsers = useMemo(() => [...filteredGrid, ...nonMatchingGrid], [filteredGrid, nonMatchingGrid])

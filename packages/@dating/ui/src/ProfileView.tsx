@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { X, ArrowLeft, MapPin, MessageCircle, Lock } from 'lucide-react'
 import type { Lang, UserProfile, AppConfig } from '@dating/core'
 import { t, formatDist, isUserActive, getZodiac, getZodiacEmoji, getAge, isProfileComplete, getMissingFields } from '@dating/core'
@@ -28,7 +28,7 @@ export function ProfileView({
   onSave, onBack, editProfileUnlocked = false,
   hideAgeActive = false, onToggleHideAge,
 }: ProfileViewProps) {
-  const isEdit = !!onSave && user.isOwn === true
+  const isEdit = !!onSave
   const profileLocked = !editProfileUnlocked
 
   // Wrapper for locked fields — greyed out, no pointer events
@@ -197,84 +197,89 @@ export function ProfileView({
 
           <div className="px-4 py-4 space-y-4">
 
-            {/* ── Gender (if visible) ── */}
-            {appConfig.showGender && (
+            {/* ═══ LOCKED SECTION: All profile fields (greyed when profile locked) ═══ */}
+            <LockedSection>
+              {/* ── Gender (if visible) ── */}
+              {appConfig.showGender && (
+                <div className="space-y-1.5">
+                  <FieldLabel label="Gender" />
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Male', 'Female', 'Non-binary'] as const).map(g => (
+                      <button key={g} onClick={() => updateDraft('gender', g)}
+                        className={`h-10 rounded-lg text-sm font-medium nav-press transition-all ${draft.gender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93]'}`}>
+                        {g === 'Male' ? '♂ Male' : g === 'Female' ? '♀ Female' : '⚧ Non-binary'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── Seeking (if visible) ── */}
+              {appConfig.showGender && (
+                <div className="space-y-1.5">
+                  <FieldLabel label="Seeking Gender" />
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Men', 'Women', 'Everyone'] as const).map(g => (
+                      <button key={g} onClick={() => updateDraft('seekingGender', g)}
+                        className={`h-10 rounded-lg text-sm font-medium nav-press transition-all ${draft.seekingGender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93]'}`}>
+                        {g === 'Men' ? '♂ Men' : g === 'Women' ? '♀ Women' : '⚤ Everyone'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── DOB ── */}
               <div className="space-y-1.5">
-                <FieldLabel label="Gender" />
-                <div className="grid grid-cols-3 gap-2">
-                  {(['Male', 'Female', 'Non-binary'] as const).map(g => (
-                    <button key={g} onClick={() => updateDraft('gender', g)}
-                      className={`h-10 rounded-lg text-sm font-medium nav-press transition-all ${draft.gender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93]'}`}>
-                      {g === 'Male' ? '♂ Male' : g === 'Female' ? '♀ Female' : '⚧ Non-binary'}
-                    </button>
-                  ))}
+                <FieldLabel label={t(lang, 'dateOfBirth')} />
+                <input type="date" value={draft.dob || ''}
+                  onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
+                  className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
+                {draft.dob && <p className="text-[#8E8E93] text-[10px] mt-1">{getAge(draft.dob)} years · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</p>}
+              </div>
+
+              {/* ── Height + Weight ── */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <FieldLabel label={t(lang, 'height') + ' (cm)'} />
+                  <input type="number" value={draft.height || ''} onChange={e => updateDraft('height', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <FieldLabel label={t(lang, 'weight') + ' (kg)'} />
+                  <input type="number" value={draft.weight || ''} onChange={e => updateDraft('weight', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
                 </div>
               </div>
-            )}
 
-            {/* ── Seeking (if visible) ── */}
-            {appConfig.showGender && (
-              <div className="space-y-1.5">
-                <FieldLabel label="Seeking Gender" />
-                <div className="grid grid-cols-3 gap-2">
-                  {(['Men', 'Women', 'Everyone'] as const).map(g => (
-                    <button key={g} onClick={() => updateDraft('seekingGender', g)}
-                      className={`h-10 rounded-lg text-sm font-medium nav-press transition-all ${draft.seekingGender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93]'}`}>
-                      {g === 'Men' ? '♂ Men' : g === 'Women' ? '♀ Women' : '⚤ Everyone'}
-                    </button>
-                  ))}
+              {/* ── Position (if visible) ── */}
+              {appConfig.showPosition && (
+                <div className="space-y-1.5">
+                  <FieldLabel label="Position" />
+                  <div className="flex items-center gap-3">
+                    <span className="text-blue-400 text-xs font-bold">Bottom</span>
+                    <input type="range" min="0" max="1" step="0.1" value={draft.position ?? 0.5}
+                      onChange={e => updateDraft('position', Number(e.target.value))}
+                      className="flex-1 accent-[var(--app-primary)]" />
+                    <span className="text-orange-400 text-xs font-bold">Top</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-[#8E8E93]"><span>0 (Bot)</span><span>0.5 (Verse)</span><span>1 (Top)</span></div>
                 </div>
-              </div>
-            )}
+              )}
+            </LockedSection>
 
-            {/* ── DOB ── */}
-            <div className="space-y-1.5">
-              <FieldLabel label={t(lang, 'dateOfBirth')} />
-              <input type="date" value={draft.dob || ''}
-                onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
-                className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
-              {draft.dob && <p className="text-[#8E8E93] text-[10px] mt-1">{getAge(draft.dob)} years · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</p>}
-            </div>
+            {/* ═══ ALWAYS EDITABLE: Preferences + Hide Age ═══ */}
 
             {/* ── Hide Age Toggle ── */}
             {appConfig.showAge && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FieldLabel label="Hide Age" />
-                  {!hideAgeActive && <Lock className="w-3 h-3 text-[#8E8E93]" />}
+                  {!hideAgeActive && profileLocked && <Lock className="w-3 h-3 text-[#8E8E93]" />}
                 </div>
                 <button
                   onClick={() => { if (onToggleHideAge) onToggleHideAge() }}
                   className={`relative w-12 h-7 rounded-full transition-all duration-200 ${hideAgeActive ? 'bg-[var(--app-primary)]' : 'bg-[#2C2C2E]'} ${onToggleHideAge ? 'nav-press' : 'opacity-50'}`}>
                   <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform duration-200 ${hideAgeActive ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
-              </div>
-            )}
-
-            {/* ── Height + Weight ── */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <FieldLabel label={t(lang, 'height') + ' (cm)'} />
-                <input type="number" value={draft.height || ''} onChange={e => updateDraft('height', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
-              </div>
-              <div className="space-y-1.5">
-                <FieldLabel label={t(lang, 'weight') + ' (kg)'} />
-                <input type="number" value={draft.weight || ''} onChange={e => updateDraft('weight', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
-              </div>
-            </div>
-
-            {/* ── Position (if visible) ── */}
-            {appConfig.showPosition && (
-              <div className="space-y-1.5">
-                <FieldLabel label="Position" />
-                <div className="flex items-center gap-3">
-                  <span className="text-blue-400 text-xs font-bold">Bottom</span>
-                  <input type="range" min="0" max="1" step="0.1" value={draft.position ?? 0.5}
-                    onChange={e => updateDraft('position', Number(e.target.value))}
-                    className="flex-1 accent-[var(--app-primary)]" />
-                  <span className="text-orange-400 text-xs font-bold">Top</span>
-                </div>
-                <div className="flex justify-between text-[10px] text-[#8E8E93]"><span>0 (Bot)</span><span>0.5 (Verse)</span><span>1 (Top)</span></div>
               </div>
             )}
 
@@ -294,16 +299,18 @@ export function ProfileView({
             ))}
 
             {/* ── Open to Messages ── */}
-            <div className="space-y-1.5">
-              <FieldLabel label="Messages" />
-              <div className="flex items-center gap-2">
-                <button onClick={() => updateDraft('openToMessages', !draft.openToMessages)}
-                  className={`w-12 h-6 rounded-full transition-all nav-press ${draft.openToMessages ? 'bg-[var(--app-primary)]' : 'bg-[#2C2C2E]'}`}>
-                  <div className={`w-5 h-5 bg-white rounded-full transition-transform ${draft.openToMessages ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                </button>
-                <span className="text-sm text-white">{draft.openToMessages ? '✅ Open to messages' : '❌ Not accepting messages'}</span>
+            <LockedSection>
+              <div className="space-y-1.5">
+                <FieldLabel label="Messages" />
+                <div className="flex items-center gap-2">
+                  <button onClick={() => updateDraft('openToMessages', !draft.openToMessages)}
+                    className={`w-12 h-6 rounded-full transition-all nav-press ${draft.openToMessages ? 'bg-[var(--app-primary)]' : 'bg-[#2C2C2E]'}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full transition-transform ${draft.openToMessages ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                  </button>
+                  <span className="text-sm text-white">{draft.openToMessages ? '✅ Open to messages' : '❌ Not accepting messages'}</span>
+                </div>
               </div>
-            </div>
+            </LockedSection>
 
           </div>
         </div>
@@ -337,7 +344,7 @@ export function ProfileView({
               {isUserActive(user) && <span className="ml-2 px-1.5 py-0.5 bg-[#00D4AA]/20 text-[#00D4AA] text-[10px] font-bold rounded-full">{t(lang, 'online').toUpperCase()}</span>}
             </div>
           </div>
-          {!user.isOwn && onMessage && (
+          {onMessage && (
             <button onClick={() => onMessage(user)} className="h-10 gradient-btn rounded-xl text-white font-semibold text-sm nav-press flex items-center gap-2 px-5">
               <MessageCircle className="w-4 h-4" />
               {user.openToMessages ? '⭐ ' + t(lang, 'message') : t(lang, 'message')}
