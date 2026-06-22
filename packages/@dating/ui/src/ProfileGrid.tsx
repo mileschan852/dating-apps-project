@@ -1,0 +1,303 @@
+import React, { useState, useEffect, useRef } from 'react'
+
+// ─── Types ───────────────────────────────────────────────────────────
+
+export interface GridUser {
+  id: string
+  name: string
+  tgPhotoUrl?: string
+  isOwn?: boolean
+  isInvisible?: boolean
+  isOnline?: boolean
+  isSide?: boolean
+  position?: number
+  updatedAt?: string
+  distance: number
+  openToMessages?: boolean
+  // App-specific fields (passed through)
+  age?: number
+  height: number
+  weight: number
+  dob?: string | null
+  hasPhoto?: boolean
+  gender?: string
+  seekingGender?: string
+  role?: string
+  tgUsername?: string
+  [key: string]: any
+}
+
+export interface ProfileGridProps {
+  users: GridUser[]
+  ownProfile: GridUser
+  unlockedSlots: number
+  totalRealUsers: number
+  hasMoreUsers: boolean
+  onPromptUnlock: () => void
+  onViewOwnProfile: () => void
+  onViewPhoto: (user: any) => void
+  isAdmin: boolean
+  isLoading: boolean
+  // Render props for app-specific tile bottom content
+  renderTileBottom: (user: GridUser) => React.ReactNode
+  renderTileLabel?: (user: GridUser) => string // e.g. role label, gender label
+  // Optional: extra top-left badge (e.g. gender icon, role icon)
+  renderTileTopLeft?: (user: GridUser) => React.ReactNode
+  // Optional: custom tile className
+  tileClassName?: string
+  // Optional: matching user IDs for dimming non-matching users
+  matchingIds?: Set<string>
+  // Optional: logo URL for profile photo fallback
+  logoUrl?: string
+}
+
+// ─── Profile Tile ────────────────────────────────────────────────────
+
+function GridTile({
+  user,
+  onClick,
+  renderBottom,
+  renderTopLeft,
+  tileClassName,
+  logoUrl,
+}: {
+  user: GridUser
+  onClick?: () => void
+  renderBottom: (user: GridUser) => React.ReactNode
+  renderTopLeft?: (user: GridUser) => React.ReactNode
+  tileClassName?: string
+  logoUrl?: string
+}) {
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [imgFailed, setImgFailed] = useState(false)
+  const photo = user.tgPhotoUrl?.trim()?.startsWith('http') ? user.tgPhotoUrl : logoUrl
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  useEffect(() => {
+    setImgLoaded(false)
+    setImgFailed(false)
+    // Handle cached images: if already complete, fire load manually
+    const img = imgRef.current
+    if (img && img.complete) {
+      if (img.naturalWidth > 0) {
+        setImgLoaded(true)
+      } else {
+        setImgFailed(true)
+      }
+    }
+  }, [photo])
+
+  // Self always shows online dot. Others: visible if updated within 15 minutes.
+  const ONLINE_THRESHOLD_MS = 15 * 60 * 1000
+  const isActive = user.isOwn
+    ? true
+    : user.isOnline && user.updatedAt
+    ? Date.now() - new Date(user.updatedAt).getTime() < ONLINE_THRESHOLD_MS
+    : false
+
+  return (
+    <button
+      onClick={onClick}
+      className={`card-enter tile-aspect w-full h-full rounded-lg overflow-hidden nav-press text-left relative ${tileClassName || ''}`}
+      style={{ minHeight: '68px' }}
+    >
+      {/* Invisible eye icon — bottom right, only visible to admin */}
+      {user.isInvisible && (
+        <div
+          className="absolute bottom-5 right-0.5 z-40 w-3 h-3 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30 text-[7px]"
+          title="Invisible user"
+        >
+          👁️‍🗨️
+        </div>
+      )}
+
+      {/* Photo */}
+      {photo && !imgFailed && (
+        <img
+          ref={imgRef}
+          src={photo}
+          alt={user.name}
+          className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+          style={{ transition: 'opacity 0.3s' }}
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgFailed(true)}
+          loading="eager"
+          draggable={false}
+        />
+      )}
+
+      {/* Placeholder */}
+      {(!photo || imgFailed || !imgLoaded) && (
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-20">
+          <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+        </div>
+      )}
+
+      <div className="absolute inset-0 profile-photo-gradient pointer-events-none z-20" />
+
+      {/* Online indicator */}
+      {isActive && (
+        <div className="absolute top-0.5 right-0.5 w-2 h-2 bg-[#00D4AA] rounded-full online-pulse z-30" />
+      )}
+
+      {/* Open to messages indicator */}
+      {user.openToMessages && (
+        <div className="absolute top-0.5 left-0.5 z-30 text-[8px] bg-black/50 rounded-full w-4 h-4 flex items-center justify-center">⭐</div>
+      )}
+
+      {/* App-specific top-left badge */}
+      {renderTopLeft?.(user)}
+
+      {/* Own profile border */}
+      {user.isOwn && (
+        <div className="absolute inset-0 border-2 border-[#5AC8FA] rounded-lg pointer-events-none z-30" />
+      )}
+
+      {/* Bottom info */}
+      <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] pointer-events-none z-30 flex flex-col justify-end">
+        <p
+          className={`font-semibold text-[8px] leading-tight truncate ${
+            user.isOwn ? 'text-[#5AC8FA]' : 'text-white'
+          }`}
+        >
+          {user.isOwn ? 'You' : user.name}
+        </p>
+        {renderBottom(user)}
+      </div>
+    </button>
+  )
+}
+
+// ─── Profile Grid ────────────────────────────────────────────────────
+
+export function ProfileGrid({
+  users,
+  ownProfile,
+  unlockedSlots,
+  totalRealUsers,
+  hasMoreUsers: _hasMoreUsers,
+  onPromptUnlock,
+  onViewOwnProfile,
+  onViewPhoto,
+  isAdmin,
+  isLoading,
+  renderTileBottom,
+  renderTileTopLeft,
+  tileClassName,
+  matchingIds,
+  logoUrl,
+}: ProfileGridProps) {
+  // Build display list: own profile first, then other users, then blank tiles to fill
+  const displayUsers: GridUser[] = [ownProfile, ...users.filter((u) => u.id !== ownProfile.id)]
+
+  // Pad to 100 slots
+  while (displayUsers.length < 100) {
+    displayUsers.push({
+      id: `blank_${displayUsers.length}`,
+      name: '',
+      distance: 0,
+      age: 0,
+      height: 0,
+      weight: 0,
+      isBlank: true,
+    } as GridUser)
+  }
+
+  if (isLoading && users.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <div className="w-6 h-6 border-2 border-[#5AC8FA] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+        <p className="text-[#8E8E93] text-xs">Loading...</p>
+      </div>
+    )
+  }
+
+  // Split users: unlocked area gets users + blanks to fill, locked area gets remaining users dimmed
+  const unlockedUsers = displayUsers.slice(0, unlockedSlots)
+  const lockedUsers = displayUsers.slice(unlockedSlots)
+
+  return (
+    <div className="grid grid-cols-5 gap-1.5">
+      {/* UNLOCKED AREA: users first, then blanks to fill the row */}
+      {unlockedUsers.map((user, idx) => {
+        const isBlank = !!(user as any).isBlank
+
+        if (isBlank) {
+          return (
+            <div
+              key={user.id}
+              className="relative aspect-square rounded-lg bg-[#2C2C2E]/60 border border-[#3A3A3C]/40 flex items-center justify-center"
+              style={{ pointerEvents: 'none' }}
+            >
+              <svg className="w-4 h-4 text-[#48484A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </div>
+          )
+        }
+
+        return (
+          <div
+            key={user.id}
+            className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
+            style={{
+              borderColor: user.id === ownProfile.id ? '#5AC8FA' : 'transparent',
+              opacity: matchingIds && !matchingIds.has(user.id) ? 0.25 : 1,
+            }}
+          >
+            <GridTile
+              user={user}
+              onClick={() => (user.isOwn ? onViewOwnProfile() : onViewPhoto(user))}
+              renderBottom={renderTileBottom}
+              renderTopLeft={renderTileTopLeft}
+              tileClassName={tileClassName}
+              logoUrl={logoUrl}
+            />
+          </div>
+        )
+      })}
+
+      {/* DIVIDER: always at unlocked rows boundary, regardless of user count */}
+      {unlockedSlots < 100 && (
+        <div
+          className="col-span-full flex items-center justify-center py-2 my-1 cursor-pointer select-none active:opacity-60 transition-opacity rounded-lg bg-gradient-to-r from-[#5AC8FA]/10 to-purple-600/10 border border-[#5AC8FA]/30"
+          onClick={onPromptUnlock}
+        >
+          <span className="text-[10px] text-[#5AC8FA] font-bold mr-2">{'\uD83D\uDD12'}</span>
+          <span className="text-[10px] text-[#5AC8FA] font-semibold">
+            {isAdmin ? 'Tap to unlock row (admin)' : 'Tap to unlock — 1000 \u2B50'}
+          </span>
+          <span className="text-[9px] text-[#8E8E93] ml-2">
+            {totalRealUsers > unlockedSlots ? `(${totalRealUsers - unlockedSlots} more)` : ''}
+          </span>
+          <span className="mx-2 text-[10px] text-[#5AC8FA] font-bold">{'\uD83D\uDD12'}</span>
+        </div>
+      )}
+
+      {/* LOCKED AREA: remaining users dimmed */}
+      {lockedUsers.map((user) => {
+        const isBlank = !!(user as any).isBlank
+        if (isBlank) return null
+
+        return (
+          <div
+            key={user.id}
+            className="relative aspect-square rounded-lg overflow-hidden border-2 border-transparent opacity-30"
+            style={{ pointerEvents: 'none' }}
+          >
+            <GridTile
+              user={user}
+              renderBottom={renderTileBottom}
+              renderTopLeft={renderTileTopLeft}
+              tileClassName={tileClassName}
+              logoUrl={logoUrl}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}

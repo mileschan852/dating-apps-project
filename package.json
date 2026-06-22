@@ -1,0 +1,15 @@
+{
+  "name": "dating-apps-project",
+  "private": true,
+  "packageManager": "pnpm@10.34.4",
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "dev:base": "turbo run dev --filter=app-base",
+    "publish:packages": "pnpm publish -r --filter=@dating/* --access public"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "~5.7.0"
+  }
+}

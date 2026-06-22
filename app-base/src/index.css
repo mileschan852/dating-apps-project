@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* All shared styles imported from dating-core */
+@import '@dating/core/styles.css';

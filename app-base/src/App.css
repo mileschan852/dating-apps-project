@@ -1,0 +1,13 @@
+/* ─── HKMOD App-Specific Styles ─────────────────────────────────────── */
+/* All shared styles are in dating-core/styles.css. Only HKMOD-specific */
+/* overrides go here. Most styles use CSS variables from :root. */
+
+html {
+  font-size: clamp(14px, 2.5vw, 18px);
+}
+
+body {
+  overscroll-behavior: none;
+  background: var(--app-bg);
+  min-height: 100vh;
+}
