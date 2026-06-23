@@ -1,6 +1,7 @@
 // Unified Storage: Telegram CloudStorage + localStorage fallback
 
 interface TgWebApp {
+  version: string
   ready: () => void
   expand: () => void
   setHeaderColor: (color: string) => void
@@ -43,6 +44,15 @@ export function getUserId(): number | null {
 
 export function getTgUser() {
   return getTg()?.initDataUnsafe?.user
+}
+
+/** Check if Telegram WebApp supports openInvoice (requires v6.1+) */
+export function supportsPayments(): boolean {
+  const tg = getTg()
+  if (!tg) return false
+  const v = (tg as any).version || '1.0'
+  const major = parseInt(v.split('.')[0], 10)
+  return major >= 6 && typeof tg.openInvoice === 'function'
 }
 
 function cloudSet(key: string, value: string): Promise<boolean> {

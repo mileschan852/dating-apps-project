@@ -42,7 +42,7 @@ export {
 } from './hooks'
 
 // ─── Telegram / Storage ──────────────────────────────────────────────
-export { getTg, isInTelegram, getUserId, createStorage } from './storage'
+export { getTg, isInTelegram, getUserId, getTgUser, supportsPayments, createStorage } from './storage'
 export { createCloudKeys } from './cloudKeys'
 
 // ─── i18n ────────────────────────────────────────────────────────────

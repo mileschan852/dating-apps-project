@@ -36,9 +36,8 @@ export function ProfileView({
   const [activeIdx, setActiveIdx] = useState(0)
   const [imgStates, setImgStates] = useState<{ loaded: boolean; failed: boolean }[]>([])
 
-  // Read Telegram user data directly (simplest method)
+  // Read Telegram user data directly
   const tgUser = (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) || null
-  const tgFirstName = tgUser?.first_name || ''
   const tgPhoto = tgUser?.photo_url || ''
 
   // Edit draft
@@ -99,7 +98,7 @@ export function ProfileView({
               <div key={i} className={size === 'large' ? 'w-full h-full flex-shrink-0 snap-center flex items-center justify-center relative' : 'w-full h-full flex items-center justify-center relative'}>
                 {!imgStates[i]?.failed && (
                   <img src={photo} alt={`${user.name} ${i + 1}`} draggable={false} loading="eager" decoding="async"
-                    crossOrigin="anonymous" referrerPolicy="no-referrer"
+                    referrerPolicy="no-referrer"
                     className={size === 'large' ? `max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}` : `absolute inset-0 w-full h-full object-cover z-10 transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
                     onLoad={() => setImgStates(prev => { const n = [...prev]; n[i] = { ...n[i], loaded: true }; return n })}
                     onError={() => setImgStates(prev => { const n = [...prev]; n[i] = { ...n[i], failed: true }; return n })} />
@@ -220,13 +219,6 @@ export function ProfileView({
           )}
 
           <div className="px-4 py-4 space-y-4">
-
-            {/* ── Name (from Telegram, read-only) ── */}
-            <div className="space-y-1.5">
-              <FieldLabel label="Name" />
-              <input type="text" value={tgFirstName || draft.name || ''} readOnly
-                className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm opacity-60" />
-            </div>
 
             {/* ═══ LOCKED SECTION: Core profile fields ═══ */}
             <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>

@@ -7,8 +7,20 @@ import {
 } from './supabase'
 import type { Raffle, FlyingMessage } from './supabase'
 import type { UserProfile } from './types'
-import { getTg } from './storage'
+import { getTg, supportsPayments } from './storage'
 import { isAdminUser } from './utils'
+
+/** Open Stars invoice — falls back to openTelegramLink on older clients */
+function openStarsInvoice(tg: any, invoiceUrl: string, onPaid: (status: string) => void) {
+  if (supportsPayments() && tg.openInvoice) {
+    tg.openInvoice(invoiceUrl, onPaid)
+  } else if (tg.openTelegramLink) {
+    tg.openTelegramLink(invoiceUrl)
+    onPaid('paid')
+  } else {
+    alert('Please update Telegram to make purchases.')
+  }
+}
 
 export interface UseRefreshCooldownOptions {
   cooldownMs?: number
@@ -99,8 +111,8 @@ export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaf
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.result && tg?.openInvoice) {
-        tg.openInvoice(data.result, async (status: string) => {
+      if (data.ok && data.result) {
+        openStarsInvoice(tg, data.result, async (status: string) => {
           if (status === 'paid') {
             const ok = await buyRaffleTicket(raffle.id, userId)
             if (ok) {
@@ -369,8 +381,8 @@ export function usePaymentPrompt({ workerUrl, amount, purpose, onSuccess }: UseP
       clearTimeout(timer)
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl && tg?.openInvoice) {
-        tg.openInvoice(invoiceUrl, async (status: string) => {
+      if (data.ok && invoiceUrl) {
+        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
           if (status === 'paid') {
             onSuccess?.()
           }
@@ -426,8 +438,8 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
       clearTimeout(timer)
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl && tg?.openInvoice) {
-        tg.openInvoice(invoiceUrl, async (status: string) => {
+      if (data.ok && invoiceUrl) {
+        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
           if (status === 'paid') {
             setFiltersUnlocked(true)
             const now = Date.now()
@@ -482,8 +494,8 @@ export function useGridUnlock({ isAdmin, workerUrl, storageSet, storageKeys, sav
       clearTimeout(timer)
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl && tg?.openInvoice) {
-        tg.openInvoice(invoiceUrl, async (status: string) => {
+      if (data.ok && invoiceUrl) {
+        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
           if (status === 'paid') {
             const newRows = gridRowsUnlocked + 1
             setGridRowsUnlocked(newRows)
@@ -558,8 +570,8 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
       clearTimeout(timer)
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl && tg?.openInvoice) {
-        tg.openInvoice(invoiceUrl, (status: string) => {
+      if (data.ok && invoiceUrl) {
+        openStarsInvoice(tg, invoiceUrl, (status: string) => {
           if (status === 'paid') {
             const until = new Date(Date.now() + 30 * 86400000).toISOString()
             setInvisibleUntil(until)
@@ -626,8 +638,8 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
       clearTimeout(timer)
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl && tg?.openInvoice) {
-        tg.openInvoice(invoiceUrl, async (status: string) => {
+      if (data.ok && invoiceUrl) {
+        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
           if (status === 'paid') {
             await storageSet(lockKey, '0')
             if (onPaid) { try { await onPaid() } catch { /* DB persistence is best-effort */ } }
@@ -736,8 +748,8 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
       const invoiceUrl = data.invoice_url || data.result
       if (!data.ok || !invoiceUrl) { alert(data.error || 'Failed to create invoice'); return }
       const tg = getTg()
-      if (tg?.openInvoice) {
-        tg.openInvoice(invoiceUrl, async (status: string) => {
+      if (invoiceUrl) {
+        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
           if (status === 'paid') {
             const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
             setHideAgeActive(true)
@@ -758,4 +770,5 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
     setHideAgeUntil(invisibleUntilDb)
   }, [])
 
-  return { hideAgeActive, hideAgeUntil, toggleHideAge
+  return { hideAgeActive, hideAgeUntil, toggleHideAge, loadHideAgeState, setHideAgeActive, setHideAgeUntil }
+}

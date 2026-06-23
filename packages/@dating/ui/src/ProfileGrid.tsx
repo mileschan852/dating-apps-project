@@ -113,7 +113,6 @@ function GridTile({
           ref={imgRef}
           src={photo}
           alt={user.tgUsername || user.name}
-          crossOrigin="anonymous"
           referrerPolicy="no-referrer"
           className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           style={{ transition: 'opacity 0.3s' }}
