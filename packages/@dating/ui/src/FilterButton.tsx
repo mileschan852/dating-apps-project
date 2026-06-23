@@ -21,13 +21,16 @@ export function FilterButton({
   locked = false,
   title,
 }: FilterButtonProps) {
-  const base = 'text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press transition-all duration-150'
+  // Locked buttons are 2 sizes smaller (8px vs 10px)
+  const base = locked
+    ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 nav-press transition-all duration-150'
+    : 'text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press transition-all duration-150'
 
   if (locked) {
     return (
       <button
         onClick={onClick}
-        className={`${base} bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]`}
+        className={`${base} ${colorClass || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
         title={title || 'Purchase filters to unlock'}
       >
         <span className="opacity-60 mr-0.5">🔒</span>
