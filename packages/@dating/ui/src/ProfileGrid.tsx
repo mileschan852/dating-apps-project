@@ -112,7 +112,9 @@ function GridTile({
         <img
           ref={imgRef}
           src={photo}
-          alt={user.name}
+          alt={user.tgUsername || user.name}
+          crossOrigin="anonymous"
+          referrerPolicy="no-referrer"
           className={`absolute inset-0 w-full h-full object-cover z-10 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
           style={{ transition: 'opacity 0.3s' }}
           onLoad={() => setImgLoaded(true)}
@@ -122,10 +124,17 @@ function GridTile({
         />
       )}
 
-      {/* Placeholder */}
-      {(!photo || imgFailed || !imgLoaded) && (
+      {/* Loading state — initial letter */}
+      {(!photo || !imgLoaded) && !imgFailed && (
         <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-20">
-          <span className="text-lg font-bold text-[#8E8E93]">{user.name.charAt(0)}</span>
+          <span className="text-lg font-bold text-[#8E8E93]">{(user.tgUsername || user.name).charAt(0)}</span>
+        </div>
+      )}
+
+      {/* Failed state — show Telegram username text */}
+      {imgFailed && (
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-20 px-1">
+          <span className="text-[8px] font-medium text-[#8E8E93] text-center break-words w-full leading-tight">@{user.tgUsername || user.name}</span>
         </div>
       )}
 
@@ -147,7 +156,7 @@ function GridTile({
       {/* Bottom info */}
       <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] pointer-events-none z-30 flex flex-col justify-end">
         <p className="font-semibold text-[8px] leading-tight truncate text-white">
-          {user.name}
+          @{user.tgUsername || user.name}
         </p>
         {renderBottom(user)}
       </div>
@@ -236,14 +245,8 @@ export function ProfileGrid({
               opacity: matchingIds && !matchingIds.has(user.id) ? 0.25 : 1,
             }}
           >
-            {/* Own profile: force name to "You" */}
-            {isOwn && (
-              <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
-                <p className="text-[#5AC8FA] text-[8px] font-semibold px-[3px] pt-[1px]">You</p>
-              </div>
-            )}
             <GridTile
-              user={isOwn ? { ...user, name: 'You' } : user}
+              user={user}
               onClick={() => (isOwn ? onViewOwnProfile() : onViewPhoto(user))}
               renderBottom={renderTileBottom}
               renderTopLeft={renderTileTopLeft}

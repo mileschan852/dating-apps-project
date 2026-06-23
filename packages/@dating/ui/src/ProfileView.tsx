@@ -92,11 +92,19 @@ export function ProfileView({
               <div key={i} className={size === 'large' ? 'w-full h-full flex-shrink-0 snap-center flex items-center justify-center relative' : 'w-full h-full flex items-center justify-center relative'}>
                 {!imgStates[i]?.failed && (
                   <img src={photo} alt={`${user.name} ${i + 1}`} draggable={false} loading="eager" decoding="async"
+                    crossOrigin="anonymous" referrerPolicy="no-referrer"
                     className={size === 'large' ? `max-w-full max-h-[65vh] object-contain transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}` : `absolute inset-0 w-full h-full object-cover z-10 transition-opacity duration-300 ${imgStates[i]?.loaded ? 'opacity-100' : 'opacity-0'}`}
                     onLoad={() => setImgStates(prev => { const n = [...prev]; n[i] = { ...n[i], loaded: true }; return n })}
                     onError={() => setImgStates(prev => { const n = [...prev]; n[i] = { ...n[i], failed: true }; return n })} />
                 )}
-                {(!imgStates[i]?.loaded || imgStates[i]?.failed) && (
+                {imgStates[i]?.failed && (
+                  <div className={size === 'large' ? 'absolute inset-0 flex items-center justify-center' : 'absolute inset-0 flex items-center justify-center z-0'}>
+                    <div className={size === 'large' ? 'w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center px-2' : 'w-20 h-20 rounded-full bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center px-2'}>
+                      <span className={`font-medium text-[#8E8E93] text-center truncate w-full ${size === 'large' ? 'text-sm' : 'text-[10px]'}`}>{user.tgUsername ? '@' + user.tgUsername : user.name}</span>
+                    </div>
+                  </div>
+                )}
+                {!imgStates[i]?.loaded && !imgStates[i]?.failed && (
                   <div className={size === 'large' ? 'absolute inset-0 flex items-center justify-center' : 'absolute inset-0 flex items-center justify-center z-0'}>
                     <div className={size === 'large' ? 'w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center' : 'w-20 h-20 rounded-full bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center'}>
                       <span className={`font-bold text-[#8E8E93] ${size === 'large' ? 'text-4xl' : 'text-2xl'}`}>{user.name.charAt(0)}</span>
@@ -114,8 +122,8 @@ export function ProfileView({
         </>
       ) : (
         <div className={size === 'large' ? 'w-full flex items-center justify-center' : 'w-full h-full flex items-center justify-center'}>
-          <div className={size === 'large' ? 'w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center' : 'w-20 h-20 rounded-full bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center'}>
-            <span className={`font-bold text-[#8E8E93] ${size === 'large' ? 'text-4xl' : 'text-2xl'}`}>{user.name.charAt(0)}</span>
+          <div className={size === 'large' ? 'w-32 h-32 rounded-full bg-[#1A1A1A] flex items-center justify-center px-2' : 'w-20 h-20 rounded-full bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center px-2'}>
+            <span className={`font-medium text-[#8E8E93] text-center truncate w-full ${size === 'large' ? 'text-sm' : 'text-[10px]'}`}>{user.tgUsername ? '@' + user.tgUsername : user.name}</span>
           </div>
         </div>
       )}
