@@ -10,6 +10,8 @@ export interface CloudKeyMap {
   weight: string
   position: string
   isSide: string
+  gender: string
+  seeking: string
   pref1: string
   pref2: string
   pref3: string
@@ -40,6 +42,8 @@ export function createCloudKeys(prefix: string): CloudKeyMap {
     weight: `${prefix}_weight`,
     position: `${prefix}_position`,
     isSide: `${prefix}_isSide`,
+    gender: `${prefix}_gender`,
+    seeking: `${prefix}_seeking`,
     pref1: `${prefix}_pref1`,
     pref2: `${prefix}_pref2`,
     pref3: `${prefix}_pref3`,
