@@ -89,25 +89,22 @@ export function getAge(dob?: string): number {
 
 // ─── Profile Completion ───────────────────────────────────────────────
 
-export function isProfileComplete(p: UserProfile): boolean {
-  return !!(
-    p.name &&
-    p.name !== 'You' &&
-    p.dob &&
-    p.gender &&
-    p.height > 0 &&
-    p.weight > 0 &&
-    p.hasPhoto
-  )
+export function isProfileComplete(p: UserProfile, cfg?: { showGender?: boolean; showHeight?: boolean; showWeight?: boolean }): boolean {
+  const ok = !!(p.name && p.name.trim() && p.dob && p.hasPhoto)
+  if (!ok) return false
+  if (cfg?.showGender !== false && !p.gender) return false
+  if (cfg?.showHeight !== false && !(p.height > 0)) return false
+  if (cfg?.showWeight !== false && !(p.weight > 0)) return false
+  return true
 }
 
-export function getMissingFields(p: UserProfile): string[] {
+export function getMissingFields(p: UserProfile, cfg?: { showGender?: boolean; showHeight?: boolean; showWeight?: boolean }): string[] {
   const missing: string[] = []
-  if (!p.name || p.name === 'You') missing.push('name')
+  if (!p.name || !p.name.trim()) missing.push('name')
   if (!p.dob) missing.push('dob')
-  if (!p.gender) missing.push('gender')
-  if (!p.height || p.height <= 0) missing.push('height')
-  if (!p.weight || p.weight <= 0) missing.push('weight')
+  if (cfg?.showGender !== false && !p.gender) missing.push('gender')
+  if (cfg?.showHeight !== false && (!p.height || p.height <= 0)) missing.push('height')
+  if (cfg?.showWeight !== false && (!p.weight || p.weight <= 0)) missing.push('weight')
   if (!p.hasPhoto) missing.push('photo')
   return missing
 }

@@ -31,24 +31,31 @@ export function ProfileView({
   const isEdit = !!onSave
   const profileLocked = !editProfileUnlocked
 
-  // Wrapper for locked fields — greyed out, no pointer events
-  const LockedSection = ({ children }: { children: React.ReactNode }) => (
-    <div className={`relative ${profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}`}>
-      {children}
-      {profileLocked && <div className="absolute inset-0 z-10" />} {/* invisible click blocker */}
-    </div>
-  )
-
   // Photo carousel state
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const [imgStates, setImgStates] = useState<{ loaded: boolean; failed: boolean }[]>([])
 
+  // Read Telegram user data directly (simplest method)
+  const tgUser = (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) || null
+  const tgFirstName = tgUser?.first_name || ''
+  const tgPhoto = tgUser?.photo_url || ''
+
   // Edit draft
   const [draft, setDraft] = useState<UserProfile>({ ...user })
   const [saved, setSaved] = useState(false)
 
+  // Full reset when switching users
   useEffect(() => { setDraft({ ...user }) }, [user.id])
+  // Incremental photo update when Telegram photo loads asynchronously
+  useEffect(() => {
+    setDraft(prev => ({
+      ...prev,
+      tgPhotoUrl: user.tgPhotoUrl || tgPhoto,
+      tgPhotos: user.tgPhotos?.length ? user.tgPhotos : (tgPhoto ? [tgPhoto] : []),
+      hasPhoto: user.hasPhoto || !!tgPhoto,
+    }))
+  }, [user.tgPhotoUrl])
 
   // Assemble photos
   const firstPhoto = isEdit
@@ -70,7 +77,7 @@ export function ProfileView({
 
   const handleSave = () => {
     if (!onSave) return
-    const missing = getMissingFields(draft)
+    const missing = getMissingFields(draft, appConfig)
     if (missing.length > 0) { alert(`Please fill in: ${missing.join(', ')}`); return }
     onSave(draft)
     setSaved(true)
@@ -182,6 +189,15 @@ export function ProfileView({
   // ═════════════════════════════════════════════════════════════════════
   // EDIT MODE
   // ═════════════════════════════════════════════════════════════════════
+
+  // Helper: cycle preference to next option
+  const cyclePreference = (cat: PreferenceCategory) => {
+    const current = draft.preferences[cat.key] || cat.defaultValue
+    const idx = cat.options.findIndex(o => o.value === current)
+    const next = cat.options[(idx + 1) % cat.options.length]
+    updateDraft('preferences', { ...draft.preferences, [cat.key]: next.value })
+  }
+
   if (isEdit) {
     return (
       <div className="view-enter h-full flex flex-col">
@@ -196,17 +212,24 @@ export function ProfileView({
           <PhotoSection size="small" />
 
           {/* Incomplete banner */}
-          {!isProfileComplete(draft) && (
+          {!isProfileComplete(draft, appConfig) && (
             <div className="mx-4 mt-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
               <p className="text-yellow-400 text-xs font-semibold">⚠️ Complete your profile to use the app</p>
-              <p className="text-[#8E8E93] text-[10px]">Missing: {getMissingFields(draft).join(', ')}</p>
+              <p className="text-[#8E8E93] text-[10px]">Missing: {getMissingFields(draft, appConfig).join(', ')}</p>
             </div>
           )}
 
           <div className="px-4 py-4 space-y-4">
 
-            {/* ═══ LOCKED SECTION: All profile fields (greyed when profile locked) ═══ */}
-            <LockedSection>
+            {/* ── Name (from Telegram, read-only) ── */}
+            <div className="space-y-1.5">
+              <FieldLabel label="Name" />
+              <input type="text" value={tgFirstName || draft.name || ''} readOnly
+                className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm opacity-60" />
+            </div>
+
+            {/* ═══ LOCKED SECTION: Core profile fields ═══ */}
+            <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>
               {/* ── Gender (if visible) ── */}
               {appConfig.showGender && (
                 <div className="space-y-1.5">
@@ -272,9 +295,7 @@ export function ProfileView({
                   <div className="flex justify-between text-[10px] text-[#8E8E93]"><span>0 (Bot)</span><span>0.5 (Verse)</span><span>1 (Top)</span></div>
                 </div>
               )}
-            </LockedSection>
-
-            {/* ═══ ALWAYS EDITABLE: Preferences + Hide Age ═══ */}
+            </div>
 
             {/* ── Hide Age Toggle ── */}
             {appConfig.showAge && (
@@ -291,34 +312,25 @@ export function ProfileView({
               </div>
             )}
 
-            {/* ── Preferences ── */}
-            {appConfig.preferences.filter(c => !c.locked).map(cat => (
-              <div key={cat.key} className="space-y-1.5">
-                <FieldLabel label={cat.label[lang] || cat.label['en']} />
-                <div className="flex flex-wrap gap-1.5">
-                  {cat.options.map(opt => (
-                    <button key={opt.value} onClick={() => updateDraft('preferences', { ...draft.preferences, [cat.key]: opt.value })}
-                      className={`px-2.5 py-1.5 rounded-full text-xs font-medium nav-press transition-all ${draft.preferences[cat.key] === opt.value ? opt.colour : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-                      {opt.label[lang] || opt.label['en']}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            {/* ── Open to Messages ── */}
-            <LockedSection>
+            {/* ── Preferences: single toggle buttons, all on 1 row ── */}
+            {appConfig.preferences.filter(c => !c.locked && c.key !== 'role').length > 0 && (
               <div className="space-y-1.5">
-                <FieldLabel label="Messages" />
-                <div className="flex items-center gap-2">
-                  <button onClick={() => updateDraft('openToMessages', !draft.openToMessages)}
-                    className={`w-12 h-6 rounded-full transition-all nav-press ${draft.openToMessages ? 'bg-[var(--app-primary)]' : 'bg-[#2C2C2E]'}`}>
-                    <div className={`w-5 h-5 bg-white rounded-full transition-transform ${draft.openToMessages ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                  </button>
-                  <span className="text-sm text-white">{draft.openToMessages ? '✅ Open to messages' : '❌ Not accepting messages'}</span>
+                <FieldLabel label="Preferences" />
+                <div className="flex flex-wrap gap-1.5">
+                  {appConfig.preferences.filter(c => !c.locked && c.key !== 'role').map(cat => {
+                    const currentVal = draft.preferences[cat.key] || cat.defaultValue
+                    const currentOpt = cat.options.find(o => o.value === currentVal)
+                    return (
+                      <button key={cat.key} onClick={() => cyclePreference(cat)}
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+                        title={`${cat.label[lang] || cat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
+                        {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
-            </LockedSection>
+            )}
 
           </div>
         </div>
@@ -326,7 +338,7 @@ export function ProfileView({
         {/* Save */}
         <div className="shrink-0 px-4 py-3 border-t border-[#2C2C2E] bg-[#0A0A0A]">
           <button onClick={handleSave} className={`w-full h-12 rounded-xl text-white font-semibold text-sm nav-press transition-all ${saved ? 'bg-green-500' : 'gradient-btn'}`}>
-            {saved ? '✓ Saved' : isProfileComplete(draft) ? t(lang, 'save') : `Complete Profile (${getMissingFields(draft).length} missing)`}
+            {saved ? '✓ Saved' : isProfileComplete(draft, appConfig) ? t(lang, 'save') : `Complete Profile (${getMissingFields(draft, appConfig).length} missing)`}
           </button>
         </div>
       </div>

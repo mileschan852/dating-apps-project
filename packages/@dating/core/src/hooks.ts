@@ -118,7 +118,7 @@ export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaf
           }
         })
       }
-    } catch { /* Worker failed */ }
+    } catch { alert('Payment failed. Please try again.') }
   }, [raffle, isAdmin, tableName, workerUrl, setRaffle])
 
   const handleStartNextRaffle = useCallback(async () => {
@@ -377,7 +377,7 @@ export function usePaymentPrompt({ workerUrl, amount, purpose, onSuccess }: UseP
         })
         return true
       }
-    } catch { /* Worker failed */ }
+    } catch { alert('Payment failed. Please try again.') }
     return false
   }, [workerUrl, amount, purpose, onSuccess])
 
@@ -439,7 +439,7 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
           }
         })
       }
-    } catch { /* Worker failed */ }
+    } catch { alert('Payment failed. Please try again.') }
   }, [isAdmin, workerUrl, storageSet, storageKeys, saveToDb])
 
   return { filtersUnlocked, setFiltersUnlocked, unlockFilters, filtersUnlockedAt, setFiltersUnlockedAt }
@@ -493,7 +493,7 @@ export function useGridUnlock({ isAdmin, workerUrl, storageSet, storageKeys, sav
           }
         })
       }
-    } catch { /* Worker failed */ }
+    } catch { alert('Payment failed. Please try again.') }
   }, [isAdmin, workerUrl, storageSet, storageKeys, saveToDb, gridRowsUnlocked])
 
   return { gridRowsUnlocked, setGridRowsUnlocked, unlockRow }
@@ -569,7 +569,7 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
           }
         })
       }
-    } catch { /* Worker failed */ }
+    } catch { alert('Payment failed. Please try again.') }
   }, [isAdmin, isInvisible, hasPurchasedInvisible, invisibleActive, workerUrl, storageSet, storageKey, updateDb])
 
   const loadInvisibleState = useCallback(async (dbUntil: string | null) => {
@@ -636,8 +636,8 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
           }
         })
       }
-    } catch { /* Worker failed */ }
-  }, [isAdmin, workerUrl, storageSet, lockKey])
+    } catch { alert('Payment failed. Please try again.') }
+  }, [isAdmin, workerUrl, storageSet, lockKey, onPaid])
 
   const releaseLock = useCallback(async () => {
     await storageSet(lockKey, '0')
@@ -727,15 +727,17 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
     }
     // Purchase via Stars
     try {
+      const userId = getTg()?.initDataUnsafe?.user?.id
       const res = await fetch(workerUrl, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ purpose: 'hideAge', title: 'Hide Age 30 Days', description: 'Hide your age from other users for 30 days', price: 1000 }),
+        body: JSON.stringify({ user_id: userId, purpose: 'hideAge', amount: 1000 }),
       })
       const data = await res.json()
-      if (!data?.invoiceUrl) { alert('Failed to create invoice'); return }
+      const invoiceUrl = data.invoice_url || data.result
+      if (!data.ok || !invoiceUrl) { alert(data.error || 'Failed to create invoice'); return }
       const tg = getTg()
       if (tg?.openInvoice) {
-        tg.openInvoice(data.invoiceUrl, async (status: string) => {
+        tg.openInvoice(invoiceUrl, async (status: string) => {
           if (status === 'paid') {
             const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
             setHideAgeActive(true)
@@ -745,7 +747,7 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
           }
         })
       }
-    } catch (err) { console.error('Hide age purchase error:', err) }
+    } catch (err) { alert('Payment failed: ' + (err instanceof Error ? err.message : 'Network error')) }
   }, [hideAgeActive, hideAgeUntil, workerUrl, storageSet, storageKey, updateDb])
 
   const loadHideAgeState = useCallback((invisibleUntilDb?: string | null) => {
@@ -756,5 +758,4 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
     setHideAgeUntil(invisibleUntilDb)
   }, [])
 
-  return { hideAgeActive, hideAgeUntil, toggleHideAge, loadHideAgeState }
-}
+  return { hideAgeActive, hideAgeUntil, toggleHideAge
