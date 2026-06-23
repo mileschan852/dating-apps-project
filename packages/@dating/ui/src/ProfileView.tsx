@@ -44,25 +44,23 @@ export function ProfileView({
   const [draft, setDraft] = useState<UserProfile>({ ...user })
   const [saved, setSaved] = useState(false)
 
-  // Full reset when switching users
-  useEffect(() => { setDraft({ ...user }) }, [user.id])
-  // Incremental photo update when Telegram photo loads asynchronously
+  // Full reset when switching users — auto-fill name and photo from Telegram
   useEffect(() => {
-    setDraft(prev => ({
-      ...prev,
-      tgPhotoUrl: user.tgPhotoUrl || tgPhoto,
-      tgPhotos: user.tgPhotos?.length ? user.tgPhotos : (tgPhoto ? [tgPhoto] : []),
-      hasPhoto: user.hasPhoto || !!tgPhoto,
-    }))
-  }, [user.tgPhotoUrl])
+    const tgName = tgUser?.first_name || ''
+    const photo = tgPhoto || user.tgPhotoUrl || ''
+    setDraft({
+      ...user,
+      name: user.name || tgName,
+      tgPhotoUrl: photo,
+      tgPhotos: photo ? [photo] : user.tgPhotos,
+      hasPhoto: user.hasPhoto || !!photo,
+    })
+  }, [user.id])
 
-  // Assemble photos
-  const firstPhoto = isEdit
-    ? (draft.tgPhotoUrl?.trim()?.startsWith('http') ? draft.tgPhotoUrl : '')
-    : (user.tgPhotoUrl?.trim()?.startsWith('http') ? user.tgPhotoUrl : '')
-  const allPhotos = isEdit
-    ? (draft.tgPhotos?.length ? [firstPhoto, ...draft.tgPhotos.filter((p: string) => p !== firstPhoto)] : (firstPhoto ? [firstPhoto] : []))
-    : (user.tgPhotos?.length ? [firstPhoto, ...user.tgPhotos.filter((p: string) => p !== firstPhoto)] : (firstPhoto ? [firstPhoto] : []))
+  // Assemble photos — always read directly from Telegram first
+  const directPhoto = tgPhoto || user.tgPhotoUrl || ''
+  const firstPhoto = directPhoto.trim().startsWith('http') ? directPhoto : ''
+  const allPhotos = firstPhoto ? [firstPhoto] : []
   const displayPhotos = allPhotos.length > 0 ? allPhotos : (logoUrl ? [logoUrl] : [])
 
   useEffect(() => { setImgStates(displayPhotos.map(() => ({ loaded: false, failed: false }))); setActiveIdx(0) }, [displayPhotos.join(',')])

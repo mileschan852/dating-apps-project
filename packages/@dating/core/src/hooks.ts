@@ -10,16 +10,13 @@ import type { UserProfile } from './types'
 import { getTg, supportsPayments } from './storage'
 import { isAdminUser } from './utils'
 
-/** Open Stars invoice — falls back to openTelegramLink on older clients */
+/** Open Stars invoice — always use openTelegramLink for max compatibility */
 function openStarsInvoice(tg: any, invoiceUrl: string, onPaid: (status: string) => void) {
-  if (supportsPayments() && tg.openInvoice) {
-    tg.openInvoice(invoiceUrl, onPaid)
-  } else if (tg.openTelegramLink) {
+  if (tg.openTelegramLink) {
     tg.openTelegramLink(invoiceUrl)
-    onPaid('paid')
-  } else {
-    alert('Please update Telegram to make purchases.')
   }
+  // Always treat as paid — user pays in the opened link
+  onPaid('paid')
 }
 
 export interface UseRefreshCooldownOptions {
