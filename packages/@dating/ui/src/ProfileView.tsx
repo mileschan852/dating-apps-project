@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { X, ArrowLeft, MapPin, MessageCircle, Lock } from 'lucide-react'
 import type { Lang, UserProfile, AppConfig } from '@dating/core'
-import { t, formatDist, isUserActive, getZodiac, getZodiacEmoji, getAge, isProfileComplete, getMissingFields } from '@dating/core'
+import { t, formatDist, isUserActive, getZodiac, getZodiacEmoji, getAge, isProfileComplete, getMissingFields, useTelegramPhoto } from '@dating/core'
 
 interface ProfileViewProps {
   user: UserProfile
@@ -36,9 +36,9 @@ export function ProfileView({
   const [activeIdx, setActiveIdx] = useState(0)
   const [imgStates, setImgStates] = useState<{ loaded: boolean; failed: boolean }[]>([])
 
-  // Read Telegram user data directly
+  // Read Telegram user data — photo hook retries until Telegram loads it
+  const tgPhoto = useTelegramPhoto()
   const tgUser = (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) || null
-  const tgPhoto = tgUser?.photo_url || ''
 
   // Edit draft
   const [draft, setDraft] = useState<UserProfile>({ ...user })
@@ -57,13 +57,11 @@ export function ProfileView({
     })
   }, [user.id])
 
-  // Assemble photos — always read directly from Telegram first
-  const directPhoto = tgPhoto || user.tgPhotoUrl || ''
-  const firstPhoto = directPhoto.trim().startsWith('http') ? directPhoto : ''
-  const allPhotos = firstPhoto ? [firstPhoto] : []
-  const displayPhotos = allPhotos.length > 0 ? allPhotos : (logoUrl ? [logoUrl] : [])
+  // Photo: ONLY from Telegram — no logo fallback
+  // Photo: ONLY from Telegram hook — no logo fallback
+  const displayPhotos = tgPhoto ? [tgPhoto] : []
 
-  useEffect(() => { setImgStates(displayPhotos.map(() => ({ loaded: false, failed: false }))); setActiveIdx(0) }, [displayPhotos.join(',')])
+  useEffect(() => { setImgStates(displayPhotos.map(() => ({ loaded: false, failed: false }))); setActiveIdx(0) }, [tgPhoto])
 
   const handleScroll = () => { if (!scrollRef.current) return; setActiveIdx(Math.round(scrollRef.current.scrollLeft / scrollRef.current.clientWidth)) }
 
@@ -170,7 +168,12 @@ export function ProfileView({
       {/* Distance */}
       {appConfig.showDistance && user.distance > 0 && <span className="text-[#8E8E93]">{formatDist(user.distance)}</span>}
       {/* Position */}
-      {appConfig.showPosition && user.position !== undefined && <span className="text-[var(--app-primary)] font-bold">{user.position.toFixed(1)}</span>}
+      {appConfig.showPosition && (
+        user.isSide ? <span className="text-gray-400 font-bold">Side</span> :
+        user.position !== undefined ? <span className="text-[var(--app-primary)] font-bold">
+          {(() => { const p = user.position!; if (p === 0) return 'B'; if (p <= 0.4) return 'VB'; if (p === 0.5) return 'V'; if (p <= 0.9) return 'VT'; return 'T' })()}
+        </span> : null
+      )}
       {/* Preferences */}
       {Object.entries(user.preferences).map(([key, value]) => {
         if (!value) return null
@@ -271,18 +274,50 @@ export function ProfileView({
                 </div>
               </div>
 
-              {/* ── Position (if visible) ── */}
+              {/* ── Position: Side toggle + slider ── */}
               {appConfig.showPosition && (
                 <div className="space-y-1.5">
                   <FieldLabel label="Position" />
-                  <div className="flex items-center gap-3">
-                    <span className="text-blue-400 text-xs font-bold">Bottom</span>
+                  {/* Side toggle */}
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => { updateDraft('isSide', !draft.isSide); if (!draft.isSide) updateDraft('position', 0.5) }}
+                      className={`px-3 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${
+                        draft.isSide ? 'bg-gray-500 text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
+                      }`}>
+                      Side
+                    </button>
+                    {(() => {
+                      const p = draft.position ?? 0.5
+                      const labels = [
+                        { label: 'B', colour: 'bg-blue-500 text-white' },
+                        { label: 'VB', colour: 'bg-blue-400 text-white' },
+                        { label: 'V', colour: 'bg-purple-500 text-white' },
+                        { label: 'VT', colour: 'bg-orange-400 text-white' },
+                        { label: 'T', colour: 'bg-orange-500 text-white' },
+                      ]
+                      // Show current position label
+                      let currentLabel = 'V'
+                      let currentColour = 'bg-purple-500 text-white'
+                      if (p === 0) { currentLabel = 'B'; currentColour = 'bg-blue-500 text-white' }
+                      else if (p <= 0.4) { currentLabel = 'VB'; currentColour = 'bg-blue-400 text-white' }
+                      else if (p === 0.5) { currentLabel = 'V'; currentColour = 'bg-purple-500 text-white' }
+                      else if (p <= 0.9) { currentLabel = 'VT'; currentColour = 'bg-orange-400 text-white' }
+                      else { currentLabel = 'T'; currentColour = 'bg-orange-500 text-white' }
+                      return <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${currentColour} ${draft.isSide ? 'opacity-40' : ''}`}>{currentLabel}</span>
+                    })()}
+                  </div>
+                  {/* Slider — greyed out when Side selected */}
+                  <div className={`flex items-center gap-3 ${draft.isSide ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                    <span className="text-blue-400 text-[10px] font-bold">B</span>
                     <input type="range" min="0" max="1" step="0.1" value={draft.position ?? 0.5}
                       onChange={e => updateDraft('position', Number(e.target.value))}
                       className="flex-1 accent-[var(--app-primary)]" />
-                    <span className="text-orange-400 text-xs font-bold">Top</span>
+                    <span className="text-orange-400 text-[10px] font-bold">T</span>
                   </div>
-                  <div className="flex justify-between text-[10px] text-[#8E8E93]"><span>0 (Bot)</span><span>0.5 (Verse)</span><span>1 (Top)</span></div>
+                  <div className="flex justify-between text-[10px] text-[#8E8E93]">
+                    <span>0 B</span><span>0.1-0.4 VB</span><span>0.5 V</span><span>0.6-0.9 VT</span><span>1 T</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -302,25 +337,23 @@ export function ProfileView({
               </div>
             )}
 
-            {/* ── Preferences: single toggle buttons, all on 1 row ── */}
-            {appConfig.preferences.filter(c => !c.locked && c.key !== 'role').length > 0 && (
-              <div className="space-y-1.5">
-                <FieldLabel label="Preferences" />
-                <div className="flex flex-wrap gap-1.5">
-                  {appConfig.preferences.filter(c => !c.locked && c.key !== 'role').map(cat => {
-                    const currentVal = draft.preferences[cat.key] || cat.defaultValue
-                    const currentOpt = cat.options.find(o => o.value === currentVal)
-                    return (
-                      <button key={cat.key} onClick={() => cyclePreference(cat)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
-                        title={`${cat.label[lang] || cat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
-                        {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* ── Preferences: ALL categories, single toggle buttons, 1 row ── */}
+            <div className="space-y-1.5">
+              <FieldLabel label="Preferences" />
+              <div className="flex flex-wrap gap-1.5">
+                {appConfig.preferences.map(cat => {
+                  const currentVal = draft.preferences[cat.key] || cat.defaultValue
+                  const currentOpt = cat.options.find(o => o.value === currentVal)
+                  return (
+                    <button key={cat.key} onClick={() => cyclePreference(cat)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+                      title={`${cat.label[lang] || cat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
+                      {cat.label[lang] || cat.label['en']}: {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
+                    </button>
+                  )
+                })}
               </div>
-            )}
+            </div>
 
           </div>
         </div>

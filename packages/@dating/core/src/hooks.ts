@@ -705,13 +705,14 @@ export function useSyncUnlockStatus({ fetchStatus, storageSet, onSync }: UseSync
 // ─── Hide Age Hook — 30-day timed unlock ────────────────────────────
 
 export interface UseHideAgeOptions {
+  isAdmin: boolean
   workerUrl: string
   storageSet: (key: string, value: string) => void | Promise<void>
   storageKey: string
   updateDb: (until: string | null) => void | Promise<void>
 }
 
-export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseHideAgeOptions) {
+export function useHideAge({ isAdmin, workerUrl, storageSet, storageKey, updateDb }: UseHideAgeOptions) {
   const [hideAgeActive, setHideAgeActive] = useState(false)
   const [hideAgeUntil, setHideAgeUntil] = useState<string | null>(null)
 
@@ -732,6 +733,15 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
       setHideAgeUntil(null)
       await storageSet(storageKey, '')
       await updateDb(null)
+      return
+    }
+    // Admin bypass — no payment needed
+    if (isAdmin) {
+      const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
+      setHideAgeActive(true)
+      setHideAgeUntil(until)
+      await storageSet(storageKey, until)
+      await updateDb(until)
       return
     }
     // Purchase via Stars
@@ -757,7 +767,7 @@ export function useHideAge({ workerUrl, storageSet, storageKey, updateDb }: UseH
         })
       }
     } catch (err) { alert('Payment failed: ' + (err instanceof Error ? err.message : 'Network error')) }
-  }, [hideAgeActive, hideAgeUntil, workerUrl, storageSet, storageKey, updateDb])
+  }, [hideAgeActive, hideAgeUntil, isAdmin, workerUrl, storageSet, storageKey, updateDb])
 
   const loadHideAgeState = useCallback((invisibleUntilDb?: string | null) => {
     if (!invisibleUntilDb) { setHideAgeActive(false); setHideAgeUntil(null); return }

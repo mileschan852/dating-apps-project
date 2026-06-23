@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useTelegramPhoto } from '@dating/core'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -68,7 +69,9 @@ function GridTile({
 }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
-  const photo = user.tgPhotoUrl?.trim()?.startsWith('http') ? user.tgPhotoUrl : logoUrl
+  const tgPhoto = useTelegramPhoto()
+  // Photo: Telegram hook for self, user.tgPhotoUrl for others. NO logo fallback.
+  const photo = tgPhoto || user.tgPhotoUrl || ''
   const imgRef = useRef<HTMLImageElement>(null)
 
   useEffect(() => {

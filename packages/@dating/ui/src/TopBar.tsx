@@ -52,12 +52,12 @@ export function TopBar({
   onCycleLang,
 }: TopBarProps) {
   const refreshDisabled = useMemo(
-    () => Date.now() - lastRefreshTime < 5 * 60 * 1000,
+    () => Date.now() - lastRefreshTime < 30 * 1000,
     [lastRefreshTime]
   )
 
   return (
-    <div className="sticky top-0 z-40 bg-[#0A0A0A]/95 backdrop-blur-md border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
+    <div className="relative z-40 bg-[#0A0A0A] border-b border-[#2C2C2E] px-3 py-2 flex items-center justify-between">
       {/* LEFT: Logo + App Name + Raffle + Dot Matrix Timer */}
       <div className="flex items-center gap-2">
         {logo}
@@ -75,50 +75,32 @@ export function TopBar({
 
       {/* RIGHT: Invisible | Unlock | Refresh | Language */}
       <div className="flex items-center gap-2">
-        {/* Invisible mode toggle — open eye when OFF, closed eye when ON */}
+        {/* Invisible mode toggle */}
         <button
           onClick={onToggleInvisible}
-          className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border ${
-            isInvisible
-              ? 'bg-purple-500/30 text-purple-400 border-purple-500/40'
-              : invisiblePurchased
-              ? 'bg-purple-500/10 text-purple-500/60 border-purple-500/20'
-              : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
+          className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border transition-all ${
+            isInvisible ? 'bg-purple-500/30 text-purple-400 border-purple-500/40' : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
           }`}
-          title={
-            isAdmin
-              ? isInvisible
-                ? 'Invisible ON (admin)'
-                : 'Toggle Invisible (admin)'
-              : isInvisible
-              ? 'Invisible ON'
-              : invisiblePurchased
-              ? 'Invisible purchased — click to toggle'
-              : 'Purchase Invisible Mode (2000 \u2B50)'
-          }
         >
-          {isInvisible ? '\uD83D\uDC41\u200D\uD83D\uDDE8\uFE0F' : '\uD83D\uDC41'}
+          {isInvisible ? '🙈' : '🐵'}
         </button>
 
         {/* Unlock profile lock */}
         <button
           onClick={onPromptUnlockProfile}
-          className="w-7 h-7 rounded-full bg-[var(--app-primary)]/20 border border-[var(--app-primary)]/30 flex items-center justify-center nav-press"
-          title={isAdmin ? 'Release Locks (Free)' : 'Unlock Profile (100 \u2B50)'}
+          className="w-7 h-7 rounded-full bg-[var(--app-primary)]/20 border border-[var(--app-primary)]/30 flex items-center justify-center nav-press transition-all active:scale-90"
         >
-          <span className="text-[10px]">{'\uD83D\uDD13'}</span>
+          <span className="text-[10px]">🔓</span>
         </button>
 
-        {/* Refresh */}
+        {/* Refresh — dimmed when on 30s cooldown */}
         <button
-          onClick={() => {
-            if (refreshDisabled) return
-            onRefresh()
-          }}
-          className="w-7 h-7 rounded-full bg-[#1A1A1A] border border-[#2C2C2E] flex items-center justify-center nav-press"
-          title="Refresh"
+          onClick={() => { if (!refreshDisabled) onRefresh() }}
+          className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all active:scale-90 ${
+            refreshDisabled ? 'opacity-30 bg-[#111] border-[#222] cursor-not-allowed' : 'bg-[#1A1A1A] border-[#2C2C2E] nav-press'
+          }`}
         >
-          <RefreshCw className="w-3.5 h-3.5 text-[#8E8E93]" />
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshDisabled ? 'text-[#444]' : 'text-[#8E8E93]'}`} />
         </button>
 
         {/* Language */}

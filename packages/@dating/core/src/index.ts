@@ -80,3 +80,4 @@ export {
 
 // ─── Payments ────────────────────────────────────────────────────────
 export { requestPayment, openInvoice } from './payments'
+export { useTelegramPhoto } from './useTelegramPhoto'
