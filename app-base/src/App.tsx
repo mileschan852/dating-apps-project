@@ -160,6 +160,12 @@ function dbToProfile(u: DbUser, myLat: number, myLng: number): UserProfile {
   }
 }
 
+// Maps preference index to CLOUD storage key (pref1, pref2, pref3, pref4)
+const getPrefStorageKey = (idx: number): string => {
+  const keys = [CLOUD.pref1, CLOUD.pref2, CLOUD.pref3, CLOUD.pref4]
+  return keys[idx] || CLOUD.pref1
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // 5. PROFILE → DB — Maps UserProfile back to Supabase row
 // ═════════════════════════════════════════════════════════════════════
@@ -510,6 +516,7 @@ export default function App() {
   const [groupCheck, setGroupCheck] = useState<'checking' | 'member' | 'not_member'>('checking')
   const [lang, setLang] = useState<Lang>(getDefaultLang())
   const [starsPaidFor, setStarsPaidFor] = useState<Set<string>>(new Set())
+  const [initComplete, setInitComplete] = useState(false) // True after storage + DB load finishes
   const [isPremium, setIsPremium] = useState(false)
   const [raffle, setRaffle] = useState<Raffle | null>(null)
   const [videoReady, setVideoReady] = useState(false)
@@ -529,10 +536,14 @@ export default function App() {
   useHeartbeat({ tableName: TABLE_NAME, getUserId: () => tgUserId.current, locationGranted })
   const { flyingMessages, setFlyingMessages, lastFlyingSendRef } = useFlyingMessages()
 
-  const { filtersUnlocked, setFiltersUnlocked, unlockFilters, filtersUnlockedAt, setFiltersUnlockedAt } = useFilterUnlock({
+  const { filtersUnlocked, setFiltersUnlocked, unlockFilters, filtersUnlockedAt, setFiltersUnlockedAt, filtersExpiry, setFiltersExpiry } = useFilterUnlock({
     isAdmin, workerUrl: WORKER_URL, storageSet: (k: string, v: string) => storage.set(k, v),
     storageKeys: { unlocked: CLOUD.filtersUnlocked, unlockedAt: CLOUD.filtersUnlockedAt },
     saveToDb: async (uid: number, unlocked: boolean, expires: string | null) => { await saveFiltersUnlocked(uid, unlocked, expires) },
+    fetchExpiry: async (uid: number) => {
+      const status = await fetchUserUnlockStatus(uid)
+      return status?.filters_unlocked_expires_at || null
+    },
   })
 
   const { gridRowsUnlocked, setGridRowsUnlocked, unlockRow } = useGridUnlock({
@@ -575,31 +586,42 @@ export default function App() {
 
   // ── Init: load Telegram user + saved data + Supabase sync ──────────
   useEffect(() => {
-    const tg = getTg(); const inTg = isInTelegram()
-    if (!inTg) tgUserId.current = 999999
+    (async () => {
+      const tg = getTg(); const inTg = isInTelegram()
+      if (!inTg) tgUserId.current = 999999
 
-    if (tg) {
-      tg.ready(); tg.expand(); tg.setHeaderColor('#0A0A0A')
-      const user = tg.initDataUnsafe?.user
-      if (user) {
-        tgUserId.current = user.id
-        setIsPremium(!!user.is_premium)
-        setIsAdmin(isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES))
-        const photoUrl = user.photo_url || ''
-        setOwnProfile(prev => ({
-          ...prev, id: String(user.id), name: user.first_name || prev.name,
-          tgUsername: user.username || prev.tgUsername,
-          tgPhotoUrl: photoUrl || prev.tgPhotoUrl,
-          tgPhotos: photoUrl ? [photoUrl] : prev.tgPhotos,
-          hasPhoto: (!!photoUrl && photoUrl.startsWith('http')) || prev.hasPhoto,
-          hasRealPhoto: !!photoUrl,
-          gender: APP_CONFIG.showGender ? (prev.gender) : APP_CONFIG.defaultGender,
-          seekingGender: APP_CONFIG.showGender ? (prev.seekingGender) : APP_CONFIG.defaultSeekingGender,
-        }))
-        if (photoUrl) storage.set(CLOUD.photoUrl, photoUrl)
-        if (user.first_name) storage.set(CLOUD.name, user.first_name)
+      if (tg) {
+        tg.ready(); tg.expand(); tg.setHeaderColor('#0A0A0A')
+        const user = tg.initDataUnsafe?.user
+        if (user) {
+          tgUserId.current = user.id
+          setIsPremium(!!user.is_premium)
+          setIsAdmin(isAdminUser(user, ADMIN_IDS, ADMIN_USERNAMES))
+          // Photo: try initDataUnsafe first, then fallback to worker API
+          let photoUrl = user.photo_url || ''
+          if (!photoUrl && user.id) {
+            try {
+              const photoRes = await fetch(`${WORKER_URL.replace('/createinvoice', '')}/getuserphoto?user_id=${user.id}`, { signal: AbortSignal.timeout(5000) })
+              if (photoRes.ok) {
+                const photoData = await photoRes.json()
+                if (photoData.photo_url) photoUrl = photoData.photo_url
+              }
+            } catch { /* Worker may not have this endpoint — ignore */ }
+          }
+          setOwnProfile(prev => ({
+            ...prev, id: String(user.id), name: user.first_name || prev.name,
+            tgUsername: user.username || prev.tgUsername,
+            tgPhotoUrl: photoUrl || prev.tgPhotoUrl,
+            tgPhotos: photoUrl ? [photoUrl] : prev.tgPhotos,
+            hasPhoto: (!!photoUrl && photoUrl.startsWith('http')) || prev.hasPhoto,
+            hasRealPhoto: !!photoUrl || prev.hasRealPhoto || false,
+            gender: APP_CONFIG.showGender ? (prev.gender) : APP_CONFIG.defaultGender,
+            seekingGender: APP_CONFIG.showGender ? (prev.seekingGender) : APP_CONFIG.defaultSeekingGender,
+          }))
+          if (photoUrl) storage.set(CLOUD.photoUrl, photoUrl)
+          if (user.first_name) storage.set(CLOUD.name, user.first_name)
+        }
       }
-    }
 
     storage.getAll().then(result => {
       if (!result || Object.keys(result).length === 0) return
@@ -660,8 +682,9 @@ export default function App() {
           const filtersExpired = status.filters_unlocked_expires_at ? new Date(status.filters_unlocked_expires_at).getTime() < now : !status.filters_unlocked
           if (!filtersExpired && status.filters_unlocked) {
             setFiltersUnlocked(true); storage.set(CLOUD.filtersUnlocked, 'true'); storage.set(CLOUD.filtersUnlockedAt, String(now)); setFiltersUnlockedAt(now)
+            if (status.filters_unlocked_expires_at) setFiltersExpiry(status.filters_unlocked_expires_at)
           } else if (filtersExpired || !status.filters_unlocked) {
-            setFiltersUnlocked(false); storage.set(CLOUD.filtersUnlocked, ''); storage.set(CLOUD.filtersUnlockedAt, ''); setFiltersUnlockedAt(undefined)
+            setFiltersUnlocked(false); storage.set(CLOUD.filtersUnlocked, ''); storage.set(CLOUD.filtersUnlockedAt, ''); setFiltersUnlockedAt(undefined); setFiltersExpiry(null)
           }
           const dbRows = status.grid_rows_unlocked || 0
           if (dbRows >= 0) { setGridRowsUnlocked(dbRows); storage.set(CLOUD.gridRowsUnlocked, String(dbRows)) }
@@ -676,8 +699,8 @@ export default function App() {
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) { loaded.lat = lat; loaded.lng = lng; setLocationGranted(true) }
       }
 
-      // Supabase fallback: if DOB/height/weight missing from local storage, fetch full profile from DB
-      const needsFallback = syncId && (!result[CLOUD.dob]?.trim() || !result[CLOUD.height]?.trim() || !result[CLOUD.weight]?.trim())
+      // Supabase fallback: if ANY profile field missing from local storage, fetch full profile from DB
+      const needsFallback = syncId && (!result[CLOUD.dob]?.trim() || !result[CLOUD.height]?.trim() || !result[CLOUD.weight]?.trim() || !result[CLOUD.photoUrl]?.trim())
       if (needsFallback) {
         fetchUser(syncId).then((dbUser: DbUser | null) => {
           if (!dbUser) return
@@ -688,6 +711,12 @@ export default function App() {
           if (dbUser.weight) dbLoaded.weight = dbUser.weight
           if (dbUser.position !== undefined) dbLoaded.position = dbUser.position
           if (dbUser.gender) dbLoaded.gender = dbUser.gender as 'Male' | 'Female' | 'Non-binary'
+          if (dbUser.photo_url?.startsWith('http')) {
+            dbLoaded.tgPhotoUrl = dbUser.photo_url
+            dbLoaded.tgPhotos = [dbUser.photo_url]
+            dbLoaded.hasPhoto = true
+            dbLoaded.hasRealPhoto = true
+          }
           if (dbUser.preference1) { const prefs = { ...(dbLoaded.preferences || {}) }; prefs.safety = dbUser.preference1; dbLoaded.preferences = prefs }
           if (dbUser.preference2) { const prefs = { ...(dbLoaded.preferences || {}) }; prefs.role = dbUser.preference2; dbLoaded.preferences = prefs }
           if (dbUser.preference3) { const prefs = { ...(dbLoaded.preferences || {}) }; prefs.party = dbUser.preference3; dbLoaded.preferences = prefs }
@@ -710,23 +739,27 @@ export default function App() {
           return merged
         })
       }
-    })
+
+      // Mark init complete — profile check effect can now run
+      setInitComplete(true)
+    })()
+  })()
   }, [])
 
   // ── Check profile completeness on init — open edit if incomplete ────
+  // Only runs AFTER storage.getAll() + DB fallback complete (initComplete flag)
   useEffect(() => {
-    // After all init data loaded (local storage + Supabase fallback), check profile
-    const checkTimer = setTimeout(() => {
-      setOwnProfile(prev => {
-        if (!isProfileComplete(prev, APP_CONFIG)) {
-          setEditProfileUnlocked(true)
-          setView('OWN_PROFILE')
-        }
-        return prev
-      })
-    }, 5000) // Wait for splash + local storage + Supabase fallback
-    return () => clearTimeout(checkTimer)
-  }, [])
+    if (!initComplete) return // Wait for storage load to finish
+    setOwnProfile(prev => {
+      const complete = isProfileComplete(prev, APP_CONFIG)
+      console.log('[ProfileCheck] initComplete=true, profileComplete=', complete, 'dob=', !!prev.dob, 'height=', prev.height, 'weight=', prev.weight)
+      if (!complete) {
+        setEditProfileUnlocked(true)
+        setView('OWN_PROFILE')
+      }
+      return prev
+    })
+  }, [initComplete])
 
   // ── Auto upsert ────────────────────────────────────────────────────
   useEffect(() => {
@@ -736,6 +769,14 @@ export default function App() {
       if (result && !result.filters_unlocked_expires_at) ensureFilterUnlock(result.id)
     }).catch((err: Error) => console.error('Upsert error:', String(err).substring(0, 200)))
   }, [ownProfile.lat, ownProfile.lng, ownProfile.name, ownProfile.tgPhotoUrl, ownProfile.height, ownProfile.weight, ownProfile.position, JSON.stringify(ownProfile.preferences), ownProfile.openToMessages, ownProfile.tgUsername, ownProfile.dob, ownProfile.gender, ownProfile.seekingGender])
+
+  // ── Photo detection for extra row: update hasRealPhoto when photo URL appears ──
+  useEffect(() => {
+    const hasPhoto = !!(ownProfile.tgPhotoUrl && ownProfile.tgPhotoUrl.startsWith('http'))
+    if (hasPhoto && !ownProfile.hasRealPhoto) {
+      setOwnProfile(prev => ({ ...prev, hasRealPhoto: true }))
+    }
+  }, [ownProfile.tgPhotoUrl])
 
   // ── Refresh ────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {

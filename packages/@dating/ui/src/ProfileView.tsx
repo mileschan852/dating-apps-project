@@ -337,23 +337,49 @@ export function ProfileView({
               </div>
             )}
 
-            {/* ── Preferences: ALL categories, single toggle buttons, 1 row ── */}
-            <div className="space-y-1.5">
-              <FieldLabel label="Preferences" />
+            {/* ── Locked Preferences: Safety + Location (locked when profile locked) ── */}
+            <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>
               <div className="flex flex-wrap gap-1.5">
-                {appConfig.preferences.map(cat => {
+                {appConfig.preferences.filter(cat => cat.key !== 'party').map(cat => {
                   const currentVal = draft.preferences[cat.key] || cat.defaultValue
                   const currentOpt = cat.options.find(o => o.value === currentVal)
                   return (
                     <button key={cat.key} onClick={() => cyclePreference(cat)}
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
                       title={`${cat.label[lang] || cat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
-                      {cat.label[lang] || cat.label['en']}: {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
+                      {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
                     </button>
                   )
                 })}
               </div>
             </div>
+
+            {/* ── Party: always editable, toggles Party ↔ Party✓ only ── */}
+            {(() => {
+              const partyCat = appConfig.preferences.find(c => c.key === 'party')
+              if (!partyCat) return null
+              const currentVal = draft.preferences.party || partyCat.defaultValue
+              const currentOpt = partyCat.options.find(o => o.value === currentVal)
+
+              const handlePartyClick = () => {
+                if (profileLocked) {
+                  const nextVal = currentVal === 'PartyPlus' ? 'Party' : 'PartyPlus'
+                  updateDraft('preferences', { ...draft.preferences, party: nextVal })
+                } else {
+                  cyclePreference(partyCat)
+                }
+              }
+
+              return (
+                <div className="flex flex-wrap gap-1.5">
+                  <button onClick={handlePartyClick}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
+                    title={`${partyCat.label[lang] || partyCat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
+                    {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
+                  </button>
+                </div>
+              )
+            })()}
 
           </div>
         </div>

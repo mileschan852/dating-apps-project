@@ -10,13 +10,56 @@ import type { UserProfile } from './types'
 import { getTg, supportsPayments } from './storage'
 import { isAdminUser } from './utils'
 
-/** Open Stars invoice — always use openTelegramLink for max compatibility */
-function openStarsInvoice(tg: any, invoiceUrl: string, onPaid: (status: string) => void) {
-  if (tg.openTelegramLink) {
+/**
+ * Open Stars invoice via Telegram.
+ * Opens the invoice URL using tg.openTelegramLink for max compatibility.
+ * NOTE: We do NOT call onPaid here — we can't detect when the user actually
+ * completes payment in the opened link.
+ */
+function openStarsInvoice(tg: any, invoiceUrl: string) {
+  if (tg?.openTelegramLink) {
     tg.openTelegramLink(invoiceUrl)
+  } else if (tg?.openLink) {
+    tg.openLink(invoiceUrl)
+  } else {
+    window.open(invoiceUrl, '_blank')
   }
-  // Always treat as paid — user pays in the opened link
-  onPaid('paid')
+}
+
+/**
+ * Creates and opens a Telegram Stars payment invoice.
+ * Returns true if invoice was created and opened successfully.
+ * Caller is responsible for activating the feature after this returns.
+ */
+export async function purchaseFeature(
+  workerUrl: string,
+  purpose: string,
+  amount: number,
+): Promise<boolean> {
+  const tg = getTg()
+  const userId = tg?.initDataUnsafe?.user?.id
+  if (!userId) { alert('Not logged in. Please open this app from Telegram.'); return false }
+
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    const res = await fetch(workerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, amount, purpose }),
+      signal: ctrl.signal,
+    })
+    clearTimeout(timer)
+    const data = await res.json()
+    const invoiceUrl = data.invoice_url || data.result
+    if (data.ok && invoiceUrl) {
+      openStarsInvoice(tg, invoiceUrl)
+      return true
+    } else {
+      alert(data.error || 'Failed to create payment invoice. Please try again.')
+      return false
+    }
+  } catch { alert('Payment failed. Please try again.'); return false }
 }
 
 export interface UseRefreshCooldownOptions {
@@ -109,23 +152,20 @@ export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaf
       clearTimeout(timer)
       const data = await res.json()
       if (data.ok && data.result) {
-        openStarsInvoice(tg, data.result, async (status: string) => {
-          if (status === 'paid') {
-            const ok = await buyRaffleTicket(raffle.id, userId)
-            if (ok) {
-              const updated = await getActiveRaffle()
-              if (updated) {
-                setRaffle(updated)
-                if (updated.current_tickets > 10 && updated.status === 'pending') {
-                  await startRaffleCountdown(updated.id)
-                  await setRaffleDrawToNextWednesday(updated.id)
-                  const final = await getActiveRaffle()
-                  if (final) setRaffle(final)
-                }
-              }
+        openStarsInvoice(tg, data.result)
+        const ok = await buyRaffleTicket(raffle.id, userId)
+        if (ok) {
+          const updated = await getActiveRaffle()
+          if (updated) {
+            setRaffle(updated)
+            if (updated.current_tickets > 10 && updated.status === 'pending') {
+              await startRaffleCountdown(updated.id)
+              await setRaffleDrawToNextWednesday(updated.id)
+              const final = await getActiveRaffle()
+              if (final) setRaffle(final)
             }
           }
-        })
+        }
       }
     } catch { alert('Payment failed. Please try again.') }
   }, [raffle, isAdmin, tableName, workerUrl, setRaffle])
@@ -379,11 +419,8 @@ export function usePaymentPrompt({ workerUrl, amount, purpose, onSuccess }: UseP
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
       if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
-          if (status === 'paid') {
-            onSuccess?.()
-          }
-        })
+        openStarsInvoice(tg, invoiceUrl)
+        onSuccess?.()
         return true
       }
     } catch { alert('Payment failed. Please try again.') }
@@ -401,57 +438,81 @@ export interface UseFilterUnlockOptions {
   storageSet: (key: string, value: string) => void | Promise<void>
   storageKeys: { unlocked: string; unlockedAt: string }
   saveToDb?: (userId: number, unlocked: boolean, expiresAt: string | null) => Promise<void>
+  /** Optional: fetch expiry timestamp from DB. Enables timer check before purchase. */
+  fetchExpiry?: (userId: number) => Promise<string | null>
 }
 
-export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, saveToDb }: UseFilterUnlockOptions) {
+/**
+ * FILTER UNLOCK — Subscription feature with DB timer check.
+ *
+ * Flow:
+ *   Admin click        → toggle directly (on/off), +30 days to DB
+ *   Has timer in future → toggle on/off freely (no charge)
+ *   No timer / expired  → purchase → activate → save +30 days to DB
+ */
+export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, saveToDb, fetchExpiry }: UseFilterUnlockOptions) {
   const [filtersUnlocked, setFiltersUnlocked] = useState(false)
   const [filtersUnlockedAt, setFiltersUnlockedAt] = useState<number | undefined>(undefined)
+  const [filtersExpiry, setFiltersExpiry] = useState<string | null>(null)
+
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
+  const hasValidSubscription = filtersExpiry !== null && Date.now() < new Date(filtersExpiry).getTime()
 
   const unlockFilters = useCallback(async () => {
     const tg = getTg()
     const userId = tg?.initDataUnsafe?.user?.id
+    if (!userId) { alert('Not logged in.'); return }
+
+    // Admin: toggle directly
     if (isAdmin) {
-      setFiltersUnlocked(true)
+      const next = !filtersUnlocked
+      setFiltersUnlocked(next)
       const now = Date.now()
       setFiltersUnlockedAt(now)
-      const expiresAt = new Date(now + 30 * 86400000).toISOString()
-      await storageSet(storageKeys.unlocked, 'true')
+      const expiresAt = new Date(now + THIRTY_DAYS).toISOString()
+      setFiltersExpiry(expiresAt)
+      await storageSet(storageKeys.unlocked, String(next))
       await storageSet(storageKeys.unlockedAt, String(now))
-      if (userId && saveToDb) {
-        await saveToDb(userId, true, expiresAt)
-      }
+      if (saveToDb) await saveToDb(userId, next, expiresAt)
       return
     }
-    if (!userId) return
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch(workerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 500, purpose: 'filters' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
-          if (status === 'paid') {
-            setFiltersUnlocked(true)
-            const now = Date.now()
-            setFiltersUnlockedAt(now)
-            const expiresAt = new Date(now + 30 * 86400000).toISOString()
-            await storageSet(storageKeys.unlocked, 'true')
-            await storageSet(storageKeys.unlockedAt, String(now))
-            if (saveToDb) await saveToDb(userId, true, expiresAt)
-          }
-        })
-      }
-    } catch { alert('Payment failed. Please try again.') }
-  }, [isAdmin, workerUrl, storageSet, storageKeys, saveToDb])
 
-  return { filtersUnlocked, setFiltersUnlocked, unlockFilters, filtersUnlockedAt, setFiltersUnlockedAt }
+    // Has valid subscription: toggle on/off freely
+    if (hasValidSubscription) {
+      const next = !filtersUnlocked
+      setFiltersUnlocked(next)
+      await storageSet(storageKeys.unlocked, String(next))
+      return
+    }
+
+    // No subscription / expired: check DB then purchase
+    let dbExpiry: string | null = null
+    if (fetchExpiry) {
+      try { dbExpiry = await fetchExpiry(userId) } catch { /* ignore */ }
+    }
+    if (dbExpiry && Date.now() < new Date(dbExpiry).getTime()) {
+      setFiltersExpiry(dbExpiry)
+      setFiltersUnlocked(true)
+      await storageSet(storageKeys.unlocked, 'true')
+      await storageSet(storageKeys.unlockedAt, String(Date.now()))
+      return
+    }
+
+    // Need to purchase
+    const ok = await purchaseFeature(workerUrl, 'filters', 500)
+    if (ok) {
+      const now = Date.now()
+      const expiresAt = new Date(now + THIRTY_DAYS).toISOString()
+      setFiltersUnlocked(true)
+      setFiltersUnlockedAt(now)
+      setFiltersExpiry(expiresAt)
+      await storageSet(storageKeys.unlocked, 'true')
+      await storageSet(storageKeys.unlockedAt, String(now))
+      if (saveToDb) await saveToDb(userId, true, expiresAt)
+    }
+  }, [isAdmin, filtersUnlocked, hasValidSubscription, workerUrl, storageSet, storageKeys, saveToDb, fetchExpiry])
+
+  return { filtersUnlocked, setFiltersUnlocked, unlockFilters, filtersUnlockedAt, setFiltersUnlockedAt, filtersExpiry, setFiltersExpiry, hasValidSubscription }
 }
 
 // ─── Grid Unlock Hook ──────────────────────────────────────────────
@@ -492,15 +553,12 @@ export function useGridUnlock({ isAdmin, workerUrl, storageSet, storageKeys, sav
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
       if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
-          if (status === 'paid') {
-            const newRows = gridRowsUnlocked + 1
-            setGridRowsUnlocked(newRows)
-            await storageSet(storageKeys.rows, String(newRows))
-            await storageSet(storageKeys.rowsAt, String(Date.now()))
-            if (saveToDb) await saveToDb(userId, newRows)
-          }
-        })
+        openStarsInvoice(tg, invoiceUrl)
+        const newRows = gridRowsUnlocked + 1
+        setGridRowsUnlocked(newRows)
+        await storageSet(storageKeys.rows, String(newRows))
+        await storageSet(storageKeys.rowsAt, String(Date.now()))
+        if (saveToDb) await saveToDb(userId, newRows)
       }
     } catch { alert('Payment failed. Please try again.') }
   }, [isAdmin, workerUrl, storageSet, storageKeys, saveToDb, gridRowsUnlocked])
@@ -568,15 +626,12 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
       if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl, (status: string) => {
-          if (status === 'paid') {
-            const until = new Date(Date.now() + 30 * 86400000).toISOString()
-            setInvisibleUntil(until)
-            setInvisibleActive(true)
-            storageSet(storageKey, 'true')
-            updateDb(userId, until)
-          }
-        })
+        openStarsInvoice(tg, invoiceUrl)
+        const until = new Date(Date.now() + 30 * 86400000).toISOString()
+        setInvisibleUntil(until)
+        setInvisibleActive(true)
+        storageSet(storageKey, 'true')
+        updateDb(userId, until)
       }
     } catch { alert('Payment failed. Please try again.') }
   }, [isAdmin, isInvisible, hasPurchasedInvisible, invisibleActive, workerUrl, storageSet, storageKey, updateDb])
@@ -636,22 +691,16 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
       if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
-          if (status === 'paid') {
-            await storageSet(lockKey, '0')
-            if (onPaid) { try { await onPaid() } catch { /* DB persistence is best-effort */ } }
-            alert('Profile lock released! Refresh to apply.')
-            window.location.reload()
-          }
-        })
+        openStarsInvoice(tg, invoiceUrl)
+        await storageSet(lockKey, '0')
+        if (onPaid) { try { await onPaid() } catch { /* DB persistence is best-effort */ } }
+        alert('Payment window opened. Complete payment in Telegram to unlock profile editing.')
       }
     } catch { alert('Payment failed. Please try again.') }
   }, [isAdmin, workerUrl, storageSet, lockKey, onPaid])
 
   const releaseLock = useCallback(async () => {
     await storageSet(lockKey, '0')
-    alert('Your profile lock has been released! Refresh to apply.')
-    window.location.reload()
     setAdminAction(null)
   }, [storageSet, lockKey])
 
@@ -756,15 +805,12 @@ export function useHideAge({ isAdmin, workerUrl, storageSet, storageKey, updateD
       if (!data.ok || !invoiceUrl) { alert(data.error || 'Failed to create invoice'); return }
       const tg = getTg()
       if (invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl, async (status: string) => {
-          if (status === 'paid') {
-            const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
-            setHideAgeActive(true)
-            setHideAgeUntil(until)
-            await storageSet(storageKey, until)
-            await updateDb(until)
-          }
-        })
+        openStarsInvoice(tg, invoiceUrl)
+        const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
+        setHideAgeActive(true)
+        setHideAgeUntil(until)
+        await storageSet(storageKey, until)
+        await updateDb(until)
       }
     } catch (err) { alert('Payment failed: ' + (err instanceof Error ? err.message : 'Network error')) }
   }, [hideAgeActive, hideAgeUntil, isAdmin, workerUrl, storageSet, storageKey, updateDb])

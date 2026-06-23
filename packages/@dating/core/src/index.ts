@@ -26,6 +26,7 @@ export {
   useChannelFollow,
   useSyncUnlockStatus,
   useHideAge,
+  purchaseFeature,
   type UseAdminRecheckOptions,
   type UseRaffleActionsOptions,
   type UseRefreshCooldownOptions,
