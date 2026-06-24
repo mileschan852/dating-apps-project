@@ -45,6 +45,7 @@ export {
 // ─── Telegram / Storage ──────────────────────────────────────────────
 export { getTg, isInTelegram, getUserId, getTgUser, supportsPayments, createStorage } from './storage'
 export { createCloudKeys } from './cloudKeys'
+export { setTelegramUserId, getTelegramUserId } from './userId'
 
 // ─── i18n ────────────────────────────────────────────────────────────
 export { t, getLangLabel, mergeDict, getDefaultLang } from './i18n'
