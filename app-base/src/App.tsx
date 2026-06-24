@@ -592,7 +592,16 @@ export default function App() {
 
       if (tg) {
         tg.ready(); tg.expand(); tg.setHeaderColor('#0A0A0A')
-        const user = tg.initDataUnsafe?.user
+
+        // Retry: Telegram populates initDataUnsafe.user asynchronously
+        let user = tg.initDataUnsafe?.user
+        if (!user && inTg) {
+          for (let attempt = 0; attempt < 10 && !user; attempt++) {
+            await new Promise(r => setTimeout(r, 300))
+            user = (window as any).Telegram?.WebApp?.initDataUnsafe?.user
+          }
+        }
+
         if (user) {
           tgUserId.current = user.id
           setIsPremium(!!user.is_premium)
