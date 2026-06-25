@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useTelegramPhoto } from '@dating/core'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -69,9 +68,8 @@ function GridTile({
 }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
-  const tgPhoto = useTelegramPhoto()
-  // Photo: Telegram hook for self, user.tgPhotoUrl for others. NO logo fallback.
-  const photo = tgPhoto || user.tgPhotoUrl || ''
+  // Photo: use user.tgPhotoUrl from DB (own profile gets it from Telegram init in App.tsx)
+  const photo = user.tgPhotoUrl || ''
   const imgRef = useRef<HTMLImageElement>(null)
 
   useEffect(() => {
@@ -88,11 +86,12 @@ function GridTile({
     }
   }, [photo])
 
-  // Online dot: visible if updated within 15 minutes
+  // Online dot: visible if isOnline and (no updatedAt OR updated within 15 min)
+  // Own profile has isOnline=true but no updatedAt — should still show dot
   const ONLINE_THRESHOLD_MS = 15 * 60 * 1000
-  const isActive = user.isOnline && user.updatedAt
-    ? Date.now() - new Date(user.updatedAt).getTime() < ONLINE_THRESHOLD_MS
-    : false
+  const isActive = user.isOnline === true && (
+    !user.updatedAt || Date.now() - new Date(user.updatedAt).getTime() < ONLINE_THRESHOLD_MS
+  )
 
   return (
     <button
@@ -129,14 +128,14 @@ function GridTile({
       {/* Loading state — initial letter */}
       {(!photo || !imgLoaded) && !imgFailed && (
         <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-20">
-          <span className="text-lg font-bold text-[#8E8E93]">{(user.tgUsername || user.name).charAt(0)}</span>
+          <span className="text-lg font-bold text-[#8E8E93]">{(user.name || user.tgUsername || 'U').charAt(0)}</span>
         </div>
       )}
 
       {/* Failed state — show Telegram username text */}
       {imgFailed && (
         <div className="absolute inset-0 bg-gradient-to-b from-[#2C2C2E] to-[#1A1A1A] flex items-center justify-center z-20 px-1">
-          <span className="text-[8px] font-medium text-[#8E8E93] text-center break-words w-full leading-tight">@{user.tgUsername || user.name}</span>
+          <span className="text-[8px] font-medium text-[#8E8E93] text-center break-words w-full leading-tight">{user.name || user.tgUsername || 'User'}</span>
         </div>
       )}
 
@@ -158,7 +157,7 @@ function GridTile({
       {/* Bottom info */}
       <div className="absolute bottom-0 left-0 right-0 px-[3px] pb-[1px] pointer-events-none z-30 flex flex-col justify-end">
         <p className="font-semibold text-[8px] leading-tight truncate text-white">
-          @{user.tgUsername || user.name}
+          {user.name || user.tgUsername || 'User'}
         </p>
         {renderBottom(user)}
       </div>

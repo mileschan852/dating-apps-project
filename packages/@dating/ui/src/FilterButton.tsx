@@ -7,15 +7,11 @@ interface FilterButtonProps {
   colorClass?: string   // e.g. "bg-green-500/20 text-green-400" when active
   locked?: boolean
   title?: string
-  size?: 'normal' | 'small'  // Template-enforced sizing
 }
 
 /** Shared filter button used by all dating apps.
  *  Same size, same border radius, same press feedback.
  *  Apps only provide the label, colour, and click handler.
- *
- *  TEMPLATE RULE: Buttons on the RIGHT side of the dividing bar
- *  should use size="small" (2 sizes smaller than left).
  */
 export function FilterButton({
   active,
@@ -24,11 +20,9 @@ export function FilterButton({
   colorClass,
   locked = false,
   title,
-  size = 'normal',
 }: FilterButtonProps) {
-  // size="small" is 2px smaller than normal — enforced by template layout
-  const isSmall = size === 'small' || locked
-  const base = isSmall
+  // Locked buttons are 2 sizes smaller (8px vs 10px)
+  const base = locked
     ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 nav-press transition-all duration-150'
     : 'text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press transition-all duration-150'
 

@@ -46,6 +46,63 @@ export function getTgUser() {
   return getTg()?.initDataUnsafe?.user
 }
 
+// ─── Cached Telegram user ID ─────────────────────────────────────────
+// Persisted to localStorage so it survives page reloads and works
+// when initDataUnsafe is empty (e.g. group opens).
+let _cachedUserId: number | null = null
+
+export function setCachedUserId(id: number) {
+  _cachedUserId = id
+  try { localStorage.setItem('_tg_uid', String(id)) } catch {}
+}
+
+export function getCachedUserId(): number | null {
+  if (_cachedUserId) return _cachedUserId
+  try {
+    const saved = localStorage.getItem('_tg_uid')
+    if (saved) { const id = parseInt(saved); if (!isNaN(id) && id > 0) { _cachedUserId = id; return id } }
+  } catch {}
+  return null
+}
+
+/** Extract Telegram user from ALL possible sources. */
+export function extractTgUser(): { id: number; first_name: string; username?: string; photo_url?: string; is_premium?: boolean } | null {
+  const fromUnsafe = getTg()?.initDataUnsafe?.user
+  if (fromUnsafe?.id) return fromUnsafe
+
+  const initData = getTg()?.initData
+  if (initData && initData.length > 10) {
+    try {
+      const params = new URLSearchParams(initData)
+      const userJson = params.get('user')
+      if (userJson) { const user = JSON.parse(decodeURIComponent(userJson)); if (user?.id) return user }
+    } catch { /* ignore */ }
+  }
+
+  try {
+    const hash = window.location.hash
+    if (hash && hash.includes('tgWebAppData=')) {
+      const dataMatch = hash.match(/tgWebAppData=([^&]+)/)
+      if (dataMatch) {
+        const decoded = decodeURIComponent(dataMatch[1])
+        const params = new URLSearchParams(decoded)
+        const userJson = params.get('user')
+        if (userJson) { const user = JSON.parse(decodeURIComponent(userJson)); if (user?.id) return user }
+      }
+    }
+    const urlParams = new URLSearchParams(window.location.search)
+    const tgData = urlParams.get('tgWebAppData')
+    if (tgData) {
+      const decoded = decodeURIComponent(tgData)
+      const params = new URLSearchParams(decoded)
+      const userJson = params.get('user')
+      if (userJson) { const user = JSON.parse(decodeURIComponent(userJson)); if (user?.id) return user }
+    }
+  } catch { /* ignore */ }
+
+  return null
+}
+
 /** Check if Telegram WebApp supports openInvoice (requires v6.1+) */
 export function supportsPayments(): boolean {
   const tg = getTg()

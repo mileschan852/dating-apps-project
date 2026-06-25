@@ -14,6 +14,7 @@ export { UNLOCKABLE_FEATURES, ONE_OFF_PURCHASES } from './types'
 
 // ─── Hooks ───────────────────────────────────────────────────────────
 export {
+  setTelegramUserId,
   useAdminRecheck,
   useRaffleActions,
   useRefreshCooldown,
@@ -26,7 +27,6 @@ export {
   useChannelFollow,
   useSyncUnlockStatus,
   useHideAge,
-  purchaseFeature,
   type UseAdminRecheckOptions,
   type UseRaffleActionsOptions,
   type UseRefreshCooldownOptions,
@@ -43,9 +43,9 @@ export {
 } from './hooks'
 
 // ─── Telegram / Storage ──────────────────────────────────────────────
-export { getTg, isInTelegram, getUserId, getTgUser, supportsPayments, createStorage } from './storage'
+export { getTg, isInTelegram, getUserId, getTgUser, supportsPayments, extractTgUser, setCachedUserId, getCachedUserId, setCachedTgUser, getCachedTgUser, createStorage } from './storage'
+export { useTelegramPhoto } from './useTelegramPhoto'
 export { createCloudKeys } from './cloudKeys'
-export { setTelegramUserId, getTelegramUserId } from './userId'
 
 // ─── i18n ────────────────────────────────────────────────────────────
 export { t, getLangLabel, mergeDict, getDefaultLang } from './i18n'
@@ -54,7 +54,7 @@ export { createAppT, type AppTResult } from './i18nFactory'
 // ─── Supabase ────────────────────────────────────────────────────────
 export {
   hasValidKey,
-  upsertUser, fetchNearby, setOnlineStatus, deleteUser, clearAllUsers,
+  upsertUser, fetchUser, fetchNearby, setOnlineStatus, deleteUser, clearAllUsers,
   fetchUserUnlockStatus, updateInvisibleStatus, updateHideAgeStatus, updateProfileUnlockStatus,
   updateRealPhotoStatus, fetchUserPhotoStatus,
   setGridRowsUnlocked, setFiltersUnlocked,
@@ -82,4 +82,3 @@ export {
 
 // ─── Payments ────────────────────────────────────────────────────────
 export { requestPayment, openInvoice } from './payments'
-export { useTelegramPhoto } from './useTelegramPhoto'

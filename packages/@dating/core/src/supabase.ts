@@ -34,6 +34,7 @@ export interface DbUser {
   height: number
   weight: number
   position: number | null
+  is_side: boolean | null
 
   // Visibility toggles
   show_age: boolean | null
@@ -134,13 +135,24 @@ export async function upsertUser(tableName: string, user: Partial<DbUser>): Prom
   }
 }
 
+/** Fetch full user profile from Supabase — used as fallback when local storage is empty */
+export async function fetchUser(tableName: string, userId: number): Promise<DbUser | null> {
+  if (!hasValidKey) return null
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${userId}&select=*`, { headers })
+    if (!res.ok) return null
+    const data = await res.json() as DbUser[]
+    return data[0] || null
+  } catch { return null }
+}
+
 export async function fetchNearby(tableName: string, lat: number, lng: number, limit = 100): Promise<DbUser[]> {
   if (!hasValidKey) return []
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?select=*&limit=200`, { headers })
     if (!res.ok) { console.error(`fetchNearby: ${res.status}`); return [] }
     const data = (await res.json()) as DbUser[]
-    return data.filter(u => u.lat && u.lng).map(u => ({ user: u, dist: haversineKm(lat, lng, u.lat, u.lng) })).sort((a, b) => a.dist - b.dist).slice(0, limit).map(d => d.user)
+    return data.filter((u): u is typeof u & { lat: number; lng: number } => u.lat !== null && u.lng !== null).map(u => ({ user: u, dist: haversineKm(lat, lng, u.lat, u.lng) })).sort((a, b) => a.dist - b.dist).slice(0, limit).map(d => d.user)
   } catch (err) { console.error('fetchNearby:', err); return [] }
 }
 

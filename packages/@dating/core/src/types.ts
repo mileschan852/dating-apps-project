@@ -22,7 +22,8 @@ export interface UserProfile {
   gender: 'Male' | 'Female' | 'Non-binary'
   height: number         // cm
   weight: number         // kg
-  position?: number      // 0=Bottom → 1=Top (HKMOD uses this as role)
+  position?: number      // 0=Bottom → 1=Top, ignored when isSide=true
+  isSide?: boolean       // true = Side (position slider greyed out)
 
   // ── Visibility toggles ──
   // User controls which fields others can see

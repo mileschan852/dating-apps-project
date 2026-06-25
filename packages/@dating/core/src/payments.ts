@@ -1,3 +1,7 @@
+// Telegram Stars Payment Integration
+// Creates invoice via Cloudflare Worker, handles fulfillment via webhook
+
+import { getTg, getUserId } from './storage'
 
 export interface PaymentUnlockOptions {
   isAdmin: boolean
@@ -6,7 +10,7 @@ export interface PaymentUnlockOptions {
   purpose: string
   onAdminUnlock: () => void
   onPaymentSuccess: () => void
-  onError?: (err: any) => void
+  onError?: (err: unknown) => void
 }
 
 export function usePaymentUnlock({
@@ -51,10 +55,6 @@ export function usePaymentUnlock({
     }
   }
 }
-// Telegram Stars Payment Integration
-// Creates invoice via Cloudflare Worker, handles fulfillment via webhook
-
-import { getTg, getUserId } from './storage'
 
 export async function requestPayment(
   webhookUrl: string,
@@ -62,7 +62,7 @@ export async function requestPayment(
   purpose: string,
   _price: number,
   onSuccess: () => void | Promise<void>,
-  onError: (err: any) => void,
+  onError: (err: unknown) => void,
 ): Promise<void> {
   const tg = getTg()
   if (!tg) { onError(new Error('Not in Telegram')); return }
@@ -79,8 +79,8 @@ export async function requestPayment(
       return
     }
 
-    if ((tg as any).openInvoice) {
-      (tg as any).openInvoice(data.result, (status: string) => {
+    if ((tg as { openInvoice?: (url: string, cb?: (s: string) => void) => void }).openInvoice) {
+      (tg as { openInvoice: (url: string, cb?: (s: string) => void) => void }).openInvoice(data.result, (status: string) => {
         if (status === 'paid') {
           onSuccess()
         } else {
@@ -93,11 +93,11 @@ export async function requestPayment(
       onSuccess()
     }
   } catch (err) {
-    onError(err)
+    onError(err as Error)
   }
 }
 
-export function openInvoice(tg: any, url: string, callback?: (status: string) => void) {
+export function openInvoice(tg: { openInvoice?: (url: string, cb?: (s: string) => void) => void; openTelegramLink?: (url: string) => void }, url: string, callback?: (status: string) => void) {
   if (tg?.openInvoice) {
     tg.openInvoice(url, callback)
   } else if (tg?.openTelegramLink) {

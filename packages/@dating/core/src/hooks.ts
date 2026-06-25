@@ -10,11 +10,67 @@ import type { UserProfile } from './types'
 import { getTg, supportsPayments } from './storage'
 import { isAdminUser } from './utils'
 
+let _dbg = ''
+function getUserId(): number | null {
+  // Direct access — no wrapper
+  const tg = (typeof window !== 'undefined' && (window as any).Telegram) ? (window as any).Telegram.WebApp : null
+  if (!tg) { _dbg = 'no_webapp'; return null }
+  
+  // Try direct property
+  const uid = tg.initDataUnsafe?.user?.id
+  if (uid) { _dbg = 'uid=' + uid; return uid }
+  
+  // Try hash URL parsing (Telegram puts data in #tgWebAppData=...)
+  const hash = window.location.hash
+  const match = hash.match(/tgWebAppData=([^&]+)/)
+  if (match) {
+    try {
+      const data = decodeURIComponent(match[1])
+      const userMatch = data.match(/user=([^&]+)/)
+      if (userMatch) {
+        const user = JSON.parse(decodeURIComponent(userMatch[1]))
+        if (user.id) { _dbg = 'hash_uid=' + user.id; return user.id }
+      }
+    } catch {}
+  }
+
+  // Try raw initData
+  const initData = tg.initData
+  if (initData && initData.length > 10) {
+    try {
+      const params = new URLSearchParams(initData)
+      const userJson = params.get('user')
+      if (userJson) {
+        const user = JSON.parse(decodeURIComponent(userJson))
+        if (user?.id) { _dbg = 'initdata_uid=' + user.id; return user.id }
+      }
+    } catch {}
+  }
+
+  // localStorage fallback (survives reloads)
+  try {
+    const saved = localStorage.getItem('_tg_uid')
+    if (saved) {
+      const id = parseInt(saved)
+      if (!isNaN(id) && id > 0) { _dbg = 'ls_uid=' + id; return id }
+    }
+  } catch {}
+  
+  _dbg = 'hash=' + window.location.hash.slice(0, 50) + '|initData=' + (tg.initData || 'NO') + '|keys=' + JSON.stringify(Object.keys(tg.initDataUnsafe || {}))
+  return null
+}
+// @ts-ignore
+if (typeof window !== 'undefined') window._hkmodDebug = () => _dbg
+// Kept for backward compat
+export function setTelegramUserId(_id: number) {}
+
 /**
  * Open Stars invoice via Telegram.
  * Opens the invoice URL using tg.openTelegramLink for max compatibility.
  * NOTE: We do NOT call onPaid here — we can't detect when the user actually
- * completes payment in the opened link.
+ * completes payment in the opened link. Instead, onPaid should be called
+ * from a post-payment callback or when the app re-initializes and checks
+ * purchase status from the backend.
  */
 function openStarsInvoice(tg: any, invoiceUrl: string) {
   if (tg?.openTelegramLink) {
@@ -24,42 +80,6 @@ function openStarsInvoice(tg: any, invoiceUrl: string) {
   } else {
     window.open(invoiceUrl, '_blank')
   }
-}
-
-/**
- * Creates and opens a Telegram Stars payment invoice.
- * Returns true if invoice was created and opened successfully.
- * Caller is responsible for activating the feature after this returns.
- */
-export async function purchaseFeature(
-  workerUrl: string,
-  purpose: string,
-  amount: number,
-): Promise<boolean> {
-  const tg = getTg()
-  const userId = tg?.initDataUnsafe?.user?.id
-  if (!userId) { alert('Not logged in. Please open this app from Telegram.'); return false }
-
-  try {
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 8000)
-    const res = await fetch(workerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, amount, purpose }),
-      signal: ctrl.signal,
-    })
-    clearTimeout(timer)
-    const data = await res.json()
-    const invoiceUrl = data.invoice_url || data.result
-    if (data.ok && invoiceUrl) {
-      openStarsInvoice(tg, invoiceUrl)
-      return true
-    } else {
-      alert(data.error || 'Failed to create payment invoice. Please try again.')
-      return false
-    }
-  } catch { alert('Payment failed. Please try again.'); return false }
 }
 
 export interface UseRefreshCooldownOptions {
@@ -103,7 +123,7 @@ export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaf
   const handleBuyRaffleTicket = useCallback(async () => {
     if (!raffle || raffle.status === 'completed') return
     const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
+    const userId = getUserId()
     if (!userId) return
 
     // Check if raffle has already ended (deadline passed)
@@ -151,8 +171,9 @@ export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaf
       })
       clearTimeout(timer)
       const data = await res.json()
-      if (data.ok && data.result) {
-        openStarsInvoice(tg, data.result)
+      if (!data.ok || !data.result) { alert('Invoice error: ' + (data.error || 'Unknown')); return }
+      openStarsInvoice(tg, data.result)
+      try {
         const ok = await buyRaffleTicket(raffle.id, userId)
         if (ok) {
           const updated = await getActiveRaffle()
@@ -166,8 +187,8 @@ export function useRaffleActions({ tableName, workerUrl, isAdmin, raffle, setRaf
             }
           }
         }
-      }
-    } catch { alert('Payment failed. Please try again.') }
+      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
+    } catch (e: any) { alert('Network error: ' + (e?.message || 'Failed to create invoice')) }
   }, [raffle, isAdmin, tableName, workerUrl, setRaffle])
 
   const handleStartNextRaffle = useCallback(async () => {
@@ -404,7 +425,7 @@ export interface UsePaymentPromptOptions {
 export function usePaymentPrompt({ workerUrl, amount, purpose, onSuccess }: UsePaymentPromptOptions) {
   const promptPayment = useCallback(async () => {
     const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
+    const userId = getUserId()
     if (!userId) return false
     try {
       const ctrl = new AbortController()
@@ -422,9 +443,8 @@ export function usePaymentPrompt({ workerUrl, amount, purpose, onSuccess }: UseP
         openStarsInvoice(tg, invoiceUrl)
         onSuccess?.()
         return true
-      }
-    } catch { alert('Payment failed. Please try again.') }
-    return false
+      } else { alert('Invoice error: ' + (data.error || 'Unknown')); return false }
+    } catch (e: any) { alert('Network error: ' + (e?.message || 'Failed to create invoice')); return false }
   }, [workerUrl, amount, purpose, onSuccess])
 
   return { promptPayment }
@@ -460,10 +480,10 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
 
   const unlockFilters = useCallback(async () => {
     const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) { alert('Not logged in.'); return }
+    const userId = getUserId()
+    if (!userId) { alert('D:' + _dbg); return }
 
-    // Admin: toggle directly
+    // ── Admin: toggle directly ──
     if (isAdmin) {
       const next = !filtersUnlocked
       setFiltersUnlocked(next)
@@ -477,7 +497,7 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
       return
     }
 
-    // Has valid subscription: toggle on/off freely
+    // ── Has valid subscription: toggle on/off freely ──
     if (hasValidSubscription) {
       const next = !filtersUnlocked
       setFiltersUnlocked(next)
@@ -485,12 +505,14 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
       return
     }
 
-    // No subscription / expired: check DB then purchase
+    // ── No subscription / expired: check DB then purchase ──
+    // Try fetching from DB first (might have been purchased on another device)
     let dbExpiry: string | null = null
     if (fetchExpiry) {
       try { dbExpiry = await fetchExpiry(userId) } catch { /* ignore */ }
     }
     if (dbExpiry && Date.now() < new Date(dbExpiry).getTime()) {
+      // Found valid subscription in DB
       setFiltersExpiry(dbExpiry)
       setFiltersUnlocked(true)
       await storageSet(storageKeys.unlocked, 'true')
@@ -498,17 +520,19 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
       return
     }
 
-    // Need to purchase
+    // ── Need to purchase ──
     const ok = await purchaseFeature(workerUrl, 'filters', 500)
     if (ok) {
-      const now = Date.now()
-      const expiresAt = new Date(now + THIRTY_DAYS).toISOString()
-      setFiltersUnlocked(true)
-      setFiltersUnlockedAt(now)
-      setFiltersExpiry(expiresAt)
-      await storageSet(storageKeys.unlocked, 'true')
-      await storageSet(storageKeys.unlockedAt, String(now))
-      if (saveToDb) await saveToDb(userId, true, expiresAt)
+      try {
+        const now = Date.now()
+        const expiresAt = new Date(now + THIRTY_DAYS).toISOString()
+        setFiltersUnlocked(true)
+        setFiltersUnlockedAt(now)
+        setFiltersExpiry(expiresAt)
+        await storageSet(storageKeys.unlocked, 'true')
+        await storageSet(storageKeys.unlockedAt, String(now))
+        if (saveToDb) await saveToDb(userId, true, expiresAt)
+      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
     }
   }, [isAdmin, filtersUnlocked, hasValidSubscription, workerUrl, storageSet, storageKeys, saveToDb, fetchExpiry])
 
@@ -530,7 +554,7 @@ export function useGridUnlock({ isAdmin, workerUrl, storageSet, storageKeys, sav
 
   const unlockRow = useCallback(async () => {
     const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
+    const userId = getUserId()
     if (isAdmin) {
       const newRows = gridRowsUnlocked + 1
       setGridRowsUnlocked(newRows)
@@ -540,6 +564,8 @@ export function useGridUnlock({ isAdmin, workerUrl, storageSet, storageKeys, sav
       return
     }
     if (!userId) return
+    // Step 1: Create invoice
+    let invoiceUrl: string | null = null
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8000)
@@ -551,16 +577,28 @@ export function useGridUnlock({ isAdmin, workerUrl, storageSet, storageKeys, sav
       })
       clearTimeout(timer)
       const data = await res.json()
-      const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl)
-        const newRows = gridRowsUnlocked + 1
-        setGridRowsUnlocked(newRows)
-        await storageSet(storageKeys.rows, String(newRows))
-        await storageSet(storageKeys.rowsAt, String(Date.now()))
-        if (saveToDb) await saveToDb(userId, newRows)
+      if (data.ok && (data.invoice_url || data.result)) {
+        invoiceUrl = data.invoice_url || data.result
+      } else {
+        alert('Invoice error: ' + (data.error || 'Unknown'))
+        return
       }
-    } catch { alert('Payment failed. Please try again.') }
+    } catch (e: any) {
+      alert('Network error: ' + (e?.message || 'Failed to create invoice'))
+      return
+    }
+    // Step 2: Open invoice
+    openStarsInvoice(tg, invoiceUrl)
+    // Step 3: Activate feature (optimistic — user pays in Telegram)
+    try {
+      const newRows = gridRowsUnlocked + 1
+      setGridRowsUnlocked(newRows)
+      await storageSet(storageKeys.rows, String(newRows))
+      await storageSet(storageKeys.rowsAt, String(Date.now()))
+      if (saveToDb) await saveToDb(userId, newRows)
+    } catch (e: any) {
+      alert('Save error: ' + (e?.message || 'Failed to save'))
+    }
   }, [isAdmin, workerUrl, storageSet, storageKeys, saveToDb, gridRowsUnlocked])
 
   return { gridRowsUnlocked, setGridRowsUnlocked, unlockRow }
@@ -575,28 +613,39 @@ export interface UseInvisibleModeOptions {
   storageGet?: (key: string) => Promise<string | null>
   storageKey: string
   updateDb: (userId: number, until: string | null) => Promise<void>
+  /** Optional: fetch expiry from DB. If provided, used to check timer before purchase. */
+  fetchExpiry?: (userId: number) => Promise<string | null>
 }
 
-export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, storageKey, updateDb }: UseInvisibleModeOptions) {
+/**
+ * INVISIBLE MODE — Subscription feature with DB timer check.
+ *
+ * Flow:
+ *   Admin click        → toggle directly (on/off), +30 days to DB
+ *   Has timer in future → toggle on/off freely (no charge)
+ *   No timer / expired  → purchase → activate → save +30 days to DB
+ */
+export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, storageKey, updateDb, fetchExpiry }: UseInvisibleModeOptions) {
   const [invisibleUntil, setInvisibleUntil] = useState<string | null>(null)
   const [invisibleActive, setInvisibleActive] = useState(false)
 
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
+
   const isInvisible = invisibleActive && (invisibleUntil ? new Date(invisibleUntil).getTime() > Date.now() : false)
-  const hasPurchasedInvisible = invisibleUntil !== null
+  const hasPurchasedInvisible = invisibleUntil !== null && new Date(invisibleUntil).getTime() > Date.now()
 
   const toggleInvisible = useCallback(async () => {
     const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
+    const userId = getUserId()
+    if (!userId) { alert('D:' + _dbg); return }
 
+    // ── Admin: toggle directly ──
     if (isAdmin) {
       if (isInvisible) {
-        setInvisibleUntil(null)
         setInvisibleActive(false)
         await storageSet(storageKey, 'false')
-        await updateDb(userId, null)
       } else {
-        const until = new Date(Date.now() + 30 * 86400000).toISOString()
+        const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
         setInvisibleUntil(until)
         setInvisibleActive(true)
         await storageSet(storageKey, 'true')
@@ -605,6 +654,7 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
       return
     }
 
+    // ── Has purchase + not expired: toggle on/off freely ──
     if (hasPurchasedInvisible) {
       const newActive = !invisibleActive
       setInvisibleActive(newActive)
@@ -612,28 +662,17 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
       return
     }
 
-    // Not purchased - prompt payment
-    try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 8000)
-      const res = await fetch(workerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, amount: 2000, purpose: 'invisible' }),
-        signal: ctrl.signal,
-      })
-      clearTimeout(timer)
-      const data = await res.json()
-      const invoiceUrl = data.invoice_url || data.result
-      if (data.ok && invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl)
-        const until = new Date(Date.now() + 30 * 86400000).toISOString()
+    // ── No purchase / expired: need to purchase ──
+    const ok = await purchaseFeature(workerUrl, 'invisible', 2000)
+    if (ok) {
+      try {
+        const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
         setInvisibleUntil(until)
         setInvisibleActive(true)
-        storageSet(storageKey, 'true')
-        updateDb(userId, until)
-      }
-    } catch { alert('Payment failed. Please try again.') }
+        await storageSet(storageKey, 'true')
+        await updateDb(userId, until)
+      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
+    }
   }, [isAdmin, isInvisible, hasPurchasedInvisible, invisibleActive, workerUrl, storageSet, storageKey, updateDb])
 
   const loadInvisibleState = useCallback(async (dbUntil: string | null) => {
@@ -669,15 +708,33 @@ export interface UseProfileUnlockOptions {
 
 export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPaid }: UseProfileUnlockOptions) {
   const [adminAction, setAdminAction] = useState<'release' | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Load saved state from CloudStorage on mount (skip if not in Telegram)
+  useEffect(() => {
+    const tg = getTg()
+    if (!tg?.CloudStorage) return
+    try {
+      tg.CloudStorage.getItems([lockKey], (_err: any, result: any) => {
+        if (result && result[lockKey] === '0') {
+          setAdminAction('release')
+        }
+      })
+    } catch { /* CloudStorage methods throw outside Telegram — ignore */ }
+  }, [lockKey])
 
   const promptUnlockProfile = useCallback(async () => {
     if (isAdmin) {
+      // Admin: directly release the lock
+      await storageSet(lockKey, '0')
       setAdminAction('release')
+      alert('Admin: Profile lock released.')
       return
     }
     const tg = getTg()
-    const userId = tg?.initDataUnsafe?.user?.id
-    if (!userId) return
+    const userId = getUserId()
+    if (!userId) { alert('D:' + _dbg); return }
+    setIsLoading(true)
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 8000)
@@ -692,11 +749,15 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
       const invoiceUrl = data.invoice_url || data.result
       if (data.ok && invoiceUrl) {
         openStarsInvoice(tg, invoiceUrl)
+        // Post-payment: execute immediately (no page reload — user pays in opened link)
         await storageSet(lockKey, '0')
         if (onPaid) { try { await onPaid() } catch { /* DB persistence is best-effort */ } }
         alert('Payment window opened. Complete payment in Telegram to unlock profile editing.')
+      } else {
+        alert('Failed to create invoice. Please try again.')
       }
     } catch { alert('Payment failed. Please try again.') }
+    finally { setIsLoading(false) }
   }, [isAdmin, workerUrl, storageSet, lockKey, onPaid])
 
   const releaseLock = useCallback(async () => {
@@ -704,7 +765,7 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
     setAdminAction(null)
   }, [storageSet, lockKey])
 
-  return { adminAction, setAdminAction, promptUnlockProfile, releaseLock }
+  return { adminAction, setAdminAction, promptUnlockProfile, releaseLock, isLoading }
 }
 
 // ─── Channel Follow Unlock Hook ────────────────────────────────────
@@ -795,24 +856,23 @@ export function useHideAge({ isAdmin, workerUrl, storageSet, storageKey, updateD
     }
     // Purchase via Stars
     try {
-      const userId = getTg()?.initDataUnsafe?.user?.id
+      const userId = getUserId()
       const res = await fetch(workerUrl, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, purpose: 'hideAge', amount: 1000 }),
       })
       const data = await res.json()
       const invoiceUrl = data.invoice_url || data.result
-      if (!data.ok || !invoiceUrl) { alert(data.error || 'Failed to create invoice'); return }
-      const tg = getTg()
-      if (invoiceUrl) {
-        openStarsInvoice(tg, invoiceUrl)
+      if (!data.ok || !invoiceUrl) { alert('Invoice error: ' + (data.error || 'Unknown')); return }
+      openStarsInvoice(getTg(), invoiceUrl)
+      try {
         const until = new Date(Date.now() + THIRTY_DAYS).toISOString()
         setHideAgeActive(true)
         setHideAgeUntil(until)
         await storageSet(storageKey, until)
         await updateDb(until)
-      }
-    } catch (err) { alert('Payment failed: ' + (err instanceof Error ? err.message : 'Network error')) }
+      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
+    } catch (e: any) { alert('Network error: ' + (e?.message || 'Failed to create invoice')) }
   }, [hideAgeActive, hideAgeUntil, isAdmin, workerUrl, storageSet, storageKey, updateDb])
 
   const loadHideAgeState = useCallback((invisibleUntilDb?: string | null) => {
@@ -824,4 +884,217 @@ export function useHideAge({ isAdmin, workerUrl, storageSet, storageKey, updateD
   }, [])
 
   return { hideAgeActive, hideAgeUntil, toggleHideAge, loadHideAgeState, setHideAgeActive, setHideAgeUntil }
+}
+
+// ─── Unified Feature Purchase Helper ─────────────────────────────────
+
+/**
+ * Opens a Telegram Stars payment invoice.
+ * Returns true if invoice was created and opened successfully.
+ * The caller is responsible for activating the feature after this returns.
+ */
+export async function purchaseFeature(
+  workerUrl: string,
+  purpose: string,
+  amount: number,
+): Promise<boolean> {
+  const userId = getUserId()
+  if (!userId) { alert('D:' + _dbg); return false }
+
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    const res = await fetch(workerUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, amount, purpose }),
+      signal: ctrl.signal,
+    })
+    clearTimeout(timer)
+    const data = await res.json()
+    const invoiceUrl = data.invoice_url || data.result
+    if (data.ok && invoiceUrl) {
+      openStarsInvoice(tg, invoiceUrl)
+      return true
+    } else {
+      alert(data.error || 'Failed to create payment invoice. Please try again.')
+      return false
+    }
+  } catch { alert('Payment failed. Please try again.'); return false }
+}
+
+// ─── Feature Types ───────────────────────────────────────────────────
+
+export type FeatureType = 'subscription' | 'one-off'
+
+export interface FeatureConfig {
+  type: FeatureType
+  amount: number
+  purpose: string
+  durationMs?: number // For subscriptions: default 30 days
+}
+
+// ─── Subscription Feature Hook (Invisible Mode / Hide Age) ──────────
+
+export interface UseSubscriptionFeatureOptions {
+  isAdmin: boolean
+  workerUrl: string
+  storageSet: (key: string, value: string) => void | Promise<void>
+  storageKey: string
+  updateDb: (userId: number, until: string | null) => Promise<void>
+  fetchStatus: (userId: number) => Promise<string | null> // returns expiry timestamp or null
+  amount: number
+  purpose: string
+  durationMs?: number
+}
+
+export function useSubscriptionFeature({
+  isAdmin, workerUrl, storageSet, storageKey, updateDb, fetchStatus, amount, purpose, durationMs = 30 * 24 * 60 * 60 * 1000,
+}: UseSubscriptionFeatureOptions) {
+  const [isActive, setIsActive] = useState(false)
+  const [expiryDate, setExpiryDate] = useState<string | null>(null)
+  const [hasPurchased, setHasPurchased] = useState(false)
+
+  const isExpired = useMemo(() => {
+    if (!expiryDate) return true
+    return Date.now() > new Date(expiryDate).getTime()
+  }, [expiryDate])
+
+  // Load state from DB on mount
+  const loadState = useCallback(async (userId: number) => {
+    try {
+      const until = await fetchStatus(userId)
+      if (until) {
+        const expired = Date.now() > new Date(until).getTime()
+        if (expired) {
+          setIsActive(false)
+          setExpiryDate(null)
+          setHasPurchased(false)
+        } else {
+          setExpiryDate(until)
+          setHasPurchased(true)
+          // Load localStorage active state
+          // (active by default if purchased and not expired)
+        }
+      }
+    } catch { /* ignore */ }
+  }, [fetchStatus])
+
+  const toggle = useCallback(async () => {
+    const tg = getTg()
+    const userId = getUserId()
+    if (!userId) { alert('D:' + _dbg); return }
+
+    // ── Admin: always toggle directly ──
+    if (isAdmin) {
+      if (isActive) {
+        // Deactivate
+        setIsActive(false)
+        await storageSet(storageKey, 'false')
+      } else {
+        // Activate with no expiry
+        setIsActive(true)
+        setExpiryDate(new Date(Date.now() + durationMs).toISOString())
+        await storageSet(storageKey, 'true')
+        await updateDb(userId, new Date(Date.now() + durationMs).toISOString())
+      }
+      return
+    }
+
+    // ── Deactivate if currently active ──
+    if (isActive) {
+      setIsActive(false)
+      await storageSet(storageKey, 'false')
+      return
+    }
+
+    // ── Activate: check if purchased and not expired ──
+    if (hasPurchased && !isExpired && expiryDate) {
+      // Purchased and valid → just activate
+      setIsActive(true)
+      await storageSet(storageKey, 'true')
+      return
+    }
+
+    // ── Need to purchase ──
+    const ok = await purchaseFeature(workerUrl, purpose, amount)
+    if (ok) {
+      try {
+        const until = new Date(Date.now() + durationMs).toISOString()
+        setIsActive(true)
+        setHasPurchased(true)
+        setExpiryDate(until)
+        await storageSet(storageKey, 'true')
+        await updateDb(userId, until)
+      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
+    }
+  }, [isAdmin, isActive, hasPurchased, isExpired, expiryDate, workerUrl, purpose, amount, durationMs, storageSet, storageKey, updateDb])
+
+  return { isActive, setIsActive, expiryDate, setExpiryDate, hasPurchased, isExpired, toggle, loadState }
+}
+
+// ─── One-Off Feature Hook (Profile Unlock / Grid Row / Raffle) ──────
+
+export interface UseOneOffFeatureOptions {
+  isAdmin: boolean
+  workerUrl: string
+  storageSet: (key: string, value: string) => void | Promise<void>
+  storageKey: string
+  updateDb: (userId: number) => Promise<void>
+  amount: number
+  purpose: string
+  onSuccess?: () => void
+}
+
+export function useOneOffFeature({
+  isAdmin, workerUrl, storageSet, storageKey, updateDb, amount, purpose, onSuccess,
+}: UseOneOffFeatureOptions) {
+  const [isUnlocked, setIsUnlocked] = useState(false)
+
+  // Load state from CloudStorage on mount (skip if not in Telegram)
+  useEffect(() => {
+    const tg = getTg()
+    if (!tg?.CloudStorage) return
+    try {
+      tg.CloudStorage.getItems([storageKey], (_err: any, result: any) => {
+        if (result && result[storageKey]) {
+          setIsUnlocked(result[storageKey] !== '')
+        }
+      })
+    } catch { /* CloudStorage methods throw outside Telegram — ignore */ }
+  }, [storageKey])
+
+  const unlock = useCallback(async () => {
+    const tg = getTg()
+    const userId = getUserId()
+    if (!userId) { alert('D:' + _dbg); return }
+
+    // ── Admin: unlock directly ──
+    if (isAdmin) {
+      setIsUnlocked(true)
+      await storageSet(storageKey, '1')
+      await updateDb(userId)
+      onSuccess?.()
+      return
+    }
+
+    // ── Already unlocked ──
+    if (isUnlocked) {
+      onSuccess?.()
+      return
+    }
+
+    // ── Purchase ──
+    const ok = await purchaseFeature(workerUrl, purpose, amount)
+    if (ok) {
+      try {
+        setIsUnlocked(true)
+        await storageSet(storageKey, '1')
+        await updateDb(userId)
+      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
+      onSuccess?.()
+    }
+  }, [isAdmin, isUnlocked, workerUrl, purpose, amount, storageSet, storageKey, updateDb, onSuccess])
+
+  return { isUnlocked, setIsUnlocked, unlock }
 }

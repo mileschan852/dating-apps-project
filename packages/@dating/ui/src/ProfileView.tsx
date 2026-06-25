@@ -57,9 +57,9 @@ export function ProfileView({
     })
   }, [user.id])
 
-  // Photo: ONLY from Telegram — no logo fallback
-  // Photo: ONLY from Telegram hook — no logo fallback
-  const displayPhotos = tgPhoto ? [tgPhoto] : []
+  // Photo: Telegram hook first (freshest), fallback to user.tgPhotoUrl from DB/props
+  const photoSrc = tgPhoto || user.tgPhotoUrl || ''
+  const displayPhotos = photoSrc ? [photoSrc] : []
 
   useEffect(() => { setImgStates(displayPhotos.map(() => ({ loaded: false, failed: false }))); setActiveIdx(0) }, [tgPhoto])
 
@@ -171,7 +171,14 @@ export function ProfileView({
       {appConfig.showPosition && (
         user.isSide ? <span className="text-gray-400 font-bold">Side</span> :
         user.position !== undefined ? <span className="text-[var(--app-primary)] font-bold">
-          {(() => { const p = user.position!; if (p === 0) return 'B'; if (p <= 0.4) return 'VB'; if (p === 0.5) return 'V'; if (p <= 0.9) return 'VT'; return 'T' })()}
+          {(() => {
+            const p = user.position!
+            if (p === 0) return 'Bottom'
+            if (p < 0.4) return 'Versatile Bottom'
+            if (p === 0.5) return 'Versatile'
+            if (p <= 0.9) return 'Versatile Top'
+            return 'Top'
+          })()}
         </span> : null
       )}
       {/* Preferences */}
@@ -253,9 +260,20 @@ export function ProfileView({
                 </div>
               )}
 
-              {/* ── DOB ── */}
+              {/* ── DOB + Hide Age (same line) ── */}
               <div className="space-y-1.5">
-                <FieldLabel label={t(lang, 'dateOfBirth')} />
+                <div className="flex items-center justify-between">
+                  <FieldLabel label={t(lang, 'dateOfBirth')} />
+                  {appConfig.showAge && (
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={hideAgeActive}
+                        onChange={() => { if (onToggleHideAge) onToggleHideAge() }}
+                        className="w-3.5 h-3.5 rounded accent-[var(--app-primary)]" />
+                      <span className="text-[10px] text-[#8E8E93]">Hide age</span>
+                      {!hideAgeActive && profileLocked && <Lock className="w-3 h-3 text-[#8E8E93]" />}
+                    </label>
+                  )}
+                </div>
                 <input type="date" value={draft.dob || ''}
                   onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
                   className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
@@ -274,77 +292,69 @@ export function ProfileView({
                 </div>
               </div>
 
-              {/* ── Position: Side toggle + slider ── */}
+              {/* ── Position slider (0.1 ticks) + Side checkbox ── */}
               {appConfig.showPosition && (
                 <div className="space-y-1.5">
-                  <FieldLabel label="Position" />
-                  {/* Side toggle */}
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => { updateDraft('isSide', !draft.isSide); if (!draft.isSide) updateDraft('position', 0.5) }}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${
-                        draft.isSide ? 'bg-gray-500 text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
-                      }`}>
-                      Side
-                    </button>
-                    {(() => {
-                      const p = draft.position ?? 0.5
-                      const labels = [
-                        { label: 'B', colour: 'bg-blue-500 text-white' },
-                        { label: 'VB', colour: 'bg-blue-400 text-white' },
-                        { label: 'V', colour: 'bg-purple-500 text-white' },
-                        { label: 'VT', colour: 'bg-orange-400 text-white' },
-                        { label: 'T', colour: 'bg-orange-500 text-white' },
-                      ]
-                      // Show current position label
-                      let currentLabel = 'V'
-                      let currentColour = 'bg-purple-500 text-white'
-                      if (p === 0) { currentLabel = 'B'; currentColour = 'bg-blue-500 text-white' }
-                      else if (p <= 0.4) { currentLabel = 'VB'; currentColour = 'bg-blue-400 text-white' }
-                      else if (p === 0.5) { currentLabel = 'V'; currentColour = 'bg-purple-500 text-white' }
-                      else if (p <= 0.9) { currentLabel = 'VT'; currentColour = 'bg-orange-400 text-white' }
-                      else { currentLabel = 'T'; currentColour = 'bg-orange-500 text-white' }
-                      return <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${currentColour} ${draft.isSide ? 'opacity-40' : ''}`}>{currentLabel}</span>
-                    })()}
+                  <div className="flex items-center justify-between">
+                    <FieldLabel label="Role" />
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="checkbox" checked={draft.isSide}
+                        onChange={e => { updateDraft('isSide', e.target.checked); if (e.target.checked) updateDraft('position', 0.5) }}
+                        className="w-3.5 h-3.5 rounded accent-[var(--app-primary)]" />
+                      <span className="text-[10px] text-[#8E8E93]">Side</span>
+                    </label>
                   </div>
-                  {/* Slider — greyed out when Side selected */}
-                  <div className={`flex items-center gap-3 ${draft.isSide ? 'opacity-40 pointer-events-none select-none' : ''}`}>
-                    <span className="text-blue-400 text-[10px] font-bold">B</span>
-                    <input type="range" min="0" max="1" step="0.1" value={draft.position ?? 0.5}
-                      onChange={e => updateDraft('position', Number(e.target.value))}
-                      className="flex-1 accent-[var(--app-primary)]" />
-                    <span className="text-orange-400 text-[10px] font-bold">T</span>
+                  <div className={`flex items-center gap-2 ${draft.isSide ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                    <span className="text-blue-400 text-[10px] font-bold w-12 text-right">Bottom</span>
+                    <div className="flex-1 relative">
+                      <input type="range" min="0" max="1" step="0.1"
+                        value={draft.isSide ? 0.5 : (draft.position ?? 0)}
+                        disabled={draft.isSide}
+                        onChange={e => updateDraft('position', Number(e.target.value))}
+                        className="w-full accent-[var(--app-primary)]" />
+                      <div className="flex justify-between text-[8px] text-[#8E8E93] mt-0.5 px-0.5">
+                        <span>0</span><span>0.1</span><span>0.2</span><span>0.3</span><span>0.4</span>
+                        <span>0.5</span><span>0.6</span><span>0.7</span><span>0.8</span><span>0.9</span><span>1</span>
+                      </div>
+                    </div>
+                    <span className="text-orange-400 text-[10px] font-bold w-12">Top</span>
                   </div>
-                  <div className="flex justify-between text-[10px] text-[#8E8E93]">
-                    <span>0 B</span><span>0.1-0.4 VB</span><span>0.5 V</span><span>0.6-0.9 VT</span><span>1 T</span>
-                  </div>
+                  {(() => {
+                    const p = draft.position ?? 0.5
+                    let word = 'Versatile'
+                    if (p === 0) word = 'Bottom'
+                    else if (p < 0.4) word = 'Versatile Bottom'
+                    else if (p === 0.5) word = 'Versatile'
+                    else if (p <= 0.9) word = 'Versatile Top'
+                    else word = 'Top'
+                    if (draft.isSide) word = 'Side'
+                    return <p className="text-[var(--app-primary)] text-[10px] font-medium">{word}</p>
+                  })()}
                 </div>
               )}
             </div>
 
-            {/* ── Hide Age Toggle ── */}
-            {appConfig.showAge && (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FieldLabel label="Hide Age" />
-                  {!hideAgeActive && profileLocked && <Lock className="w-3 h-3 text-[#8E8E93]" />}
-                </div>
-                <button
-                  onClick={() => { if (onToggleHideAge) onToggleHideAge() }}
-                  className={`relative w-12 h-7 rounded-full transition-all duration-200 ${hideAgeActive ? 'bg-[var(--app-primary)]' : 'bg-[#2C2C2E]'} ${onToggleHideAge ? 'nav-press' : 'opacity-50'}`}>
-                  <div className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform duration-200 ${hideAgeActive ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-            )}
-
-            {/* ── Locked Preferences: Safety + Location (locked when profile locked) ── */}
+            {/* ═══ All Preferences on one line ═══ */}
             <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>
-              <div className="flex flex-wrap gap-1.5">
-                {appConfig.preferences.filter(cat => cat.key !== 'party').map(cat => {
+              <div className="flex items-center justify-between mb-1.5">
+                <FieldLabel label="Preferences" />
+                <span className="text-[10px] text-[#5AC8FA]">click to change</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {appConfig.preferences.map(cat => {
                   const currentVal = draft.preferences[cat.key] || cat.defaultValue
                   const currentOpt = cat.options.find(o => o.value === currentVal)
+                  const handleClick = () => {
+                    if (cat.key === 'party' && profileLocked) {
+                      // Locked: toggle Party ↔ PartyPlus only
+                      const nextVal = currentVal === 'PartyPlus' ? 'Party' : 'PartyPlus'
+                      updateDraft('preferences', { ...draft.preferences, party: nextVal })
+                    } else {
+                      cyclePreference(cat)
+                    }
+                  }
                   return (
-                    <button key={cat.key} onClick={() => cyclePreference(cat)}
+                    <button key={cat.key} onClick={handleClick}
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
                       title={`${cat.label[lang] || cat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
                       {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
@@ -353,33 +363,6 @@ export function ProfileView({
                 })}
               </div>
             </div>
-
-            {/* ── Party: always editable, toggles Party ↔ Party✓ only ── */}
-            {(() => {
-              const partyCat = appConfig.preferences.find(c => c.key === 'party')
-              if (!partyCat) return null
-              const currentVal = draft.preferences.party || partyCat.defaultValue
-              const currentOpt = partyCat.options.find(o => o.value === currentVal)
-
-              const handlePartyClick = () => {
-                if (profileLocked) {
-                  const nextVal = currentVal === 'PartyPlus' ? 'Party' : 'PartyPlus'
-                  updateDraft('preferences', { ...draft.preferences, party: nextVal })
-                } else {
-                  cyclePreference(partyCat)
-                }
-              }
-
-              return (
-                <div className="flex flex-wrap gap-1.5">
-                  <button onClick={handlePartyClick}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
-                    title={`${partyCat.label[lang] || partyCat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
-                    {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
-                  </button>
-                </div>
-              )
-            })()}
 
           </div>
         </div>
