@@ -7,6 +7,7 @@ interface FilterButtonProps {
   colorClass?: string   // e.g. "bg-green-500/20 text-green-400" when active
   locked?: boolean
   title?: string
+  size?: 'normal' | 'small'  // small = 2 sizes smaller than normal
 }
 
 /** Shared filter button used by all dating apps.
@@ -20,9 +21,11 @@ export function FilterButton({
   colorClass,
   locked = false,
   title,
+  size = 'normal',
 }: FilterButtonProps) {
-  // Locked buttons are 2 sizes smaller (8px vs 10px)
-  const base = locked
+  // Locked or size="small" = 2 sizes smaller (8px vs 10px)
+  const isSmall = locked || size === 'small'
+  const base = isSmall
     ? 'text-[8px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 nav-press transition-all duration-150'
     : 'text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 nav-press transition-all duration-150'
 
