@@ -281,26 +281,45 @@ export function ProfileView({
                   className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
               </div>
 
-              {/* ── Height + Weight (compact, cm/kg inline) ── */}
+              {/* ── Height + Weight (half width, labels above) ── */}
               <div className="flex items-center gap-3">
-                <div className="flex-1 flex items-center gap-1">
-                  <input type="number" value={draft.height || ''} placeholder="H"
-                    onChange={e => updateDraft('height', Number(e.target.value))}
-                    className="flex-1 h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
-                  <span className="text-[10px] text-[#8E8E93]">cm</span>
+                <div className="w-[45%]">
+                  <FieldLabel label={t(lang, 'height')} />
+                  <div className="flex items-center gap-1">
+                    <input type="number" value={draft.height || ''} placeholder="0"
+                      onChange={e => updateDraft('height', Number(e.target.value))}
+                      className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
+                    <span className="text-[10px] text-[#8E8E93]">cm</span>
+                  </div>
                 </div>
-                <div className="flex-1 flex items-center gap-1">
-                  <input type="number" value={draft.weight || ''} placeholder="W"
-                    onChange={e => updateDraft('weight', Number(e.target.value))}
-                    className="flex-1 h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
-                  <span className="text-[10px] text-[#8E8E93]">kg</span>
+                <div className="w-[45%]">
+                  <FieldLabel label={t(lang, 'weight')} />
+                  <div className="flex items-center gap-1">
+                    <input type="number" value={draft.weight || ''} placeholder="0"
+                      onChange={e => updateDraft('weight', Number(e.target.value))}
+                      className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
+                    <span className="text-[10px] text-[#8E8E93]">kg</span>
+                  </div>
                 </div>
               </div>
 
-              {/* ── Role slider + Side checkbox (same line) ── */}
+              {/* ── Role: label + word on same line, slider + Side checkbox underneath ── */}
               {appConfig.showPosition && (
                 <div className="space-y-1">
-                  <FieldLabel label="Role" />
+                  <div className="flex items-center gap-2">
+                    <FieldLabel label="Role" />
+                    {(() => {
+                      const p = draft.position ?? 0.5
+                      let word = 'Versatile'
+                      if (p === 0) word = 'Bottom'
+                      else if (p < 0.4) word = 'Versatile Bottom'
+                      else if (p === 0.5) word = 'Versatile'
+                      else if (p <= 0.9) word = 'Versatile Top'
+                      else word = 'Top'
+                      if (draft.isSide) word = 'Side'
+                      return <span className="text-[var(--app-primary)] text-[10px] font-medium">· {word}</span>
+                    })()}
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-blue-400 text-[8px] font-bold">B</span>
                     <div className="flex-1 relative">
@@ -318,21 +337,10 @@ export function ProfileView({
                       <span className="text-[10px] text-[#8E8E93]">Side</span>
                     </label>
                   </div>
-                  {(() => {
-                    const p = draft.position ?? 0.5
-                    let word = 'Versatile'
-                    if (p === 0) word = 'Bottom'
-                    else if (p < 0.4) word = 'Versatile Bottom'
-                    else if (p === 0.5) word = 'Versatile'
-                    else if (p <= 0.9) word = 'Versatile Top'
-                    else word = 'Top'
-                    if (draft.isSide) word = 'Side'
-                    return <p className="text-[var(--app-primary)] text-[10px] font-medium">{word}</p>
-                  })()}
                 </div>
               )}
 
-              {/* ═══ 3 Preferences in one row (no left labels) ═══ */}
+              {/* ═══ 3 Preferences in one row (right underneath role) ═══ */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 {appConfig.preferences.map(cat => {
                   const currentVal = draft.preferences[cat.key] || cat.defaultValue
