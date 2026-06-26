@@ -208,10 +208,12 @@ export function profileToDb(p: UserProfile): Partial<DbUser> {
     seeking_age_min: p.seekingAgeMin,
     seeking_age_max: p.seekingAgeMax,
 
-    preference1: p.preferences.pref1 || null,
-    preference2: p.preferences.pref2 || null,
-    preference3: p.preferences.pref3 || null,
-    preference4: p.preferences.pref4 || null,
+    // Map named preferences to DB columns based on app config order
+    // preference1 = first config pref (safety), preference2 = second (party), etc.
+    preference1: p.preferences.safety || null,
+    preference2: p.preferences.party || null,
+    preference3: p.preferences.role || null,
+    preference4: p.preferences.location || null,
   }
 }
 

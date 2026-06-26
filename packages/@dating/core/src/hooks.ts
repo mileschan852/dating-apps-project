@@ -1172,9 +1172,14 @@ export function useProfileSave({
         storage.set(key, val)
       }
     })
+    // Upsert to DB — always save profile fields, lat/lng optional
     const uid = getUserId()
-    if (uid && updated.lat && updated.lng) {
-      upsertUser({ ...profileToDb(updated), id: uid }).catch((err: any) =>
+    if (uid) {
+      const dbPayload = { ...profileToDb(updated), id: uid }
+      // Include lat/lng if present
+      if (updated.lat) dbPayload.lat = updated.lat
+      if (updated.lng) dbPayload.lng = updated.lng
+      upsertUser(dbPayload).catch((err: any) =>
         console.error('Profile upsert error:', err?.message || err)
       )
     }
