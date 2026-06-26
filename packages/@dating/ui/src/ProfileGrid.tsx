@@ -97,7 +97,8 @@ function GridTile({
   return (
     <button
       onClick={onClick}
-      className={`card-enter tile-aspect w-full h-full rounded-lg overflow-hidden nav-press text-left relative ${tileClassName || ''}`}
+      disabled={!onClick}
+      className={`card-enter tile-aspect w-full h-full rounded-lg overflow-hidden text-left relative ${tileClassName || ''} ${onClick ? 'nav-press' : 'cursor-default'}`}
       style={{ minHeight: '68px' }}
     >
       {/* Invisible indicator — top left, visible to everyone on own profile / admin on others */}
@@ -238,18 +239,19 @@ export function ProfileGrid({
         }
 
         const isOwn = idx === 0
+        const isMatching = !matchingIds || matchingIds.has(user.id)
         return (
           <div
             key={user.id}
-            className="relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200"
+            className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${!isMatching ? 'pointer-events-none select-none' : ''}`}
             style={{
               borderColor: isOwn ? '#5AC8FA' : 'transparent',
-              opacity: matchingIds && !matchingIds.has(user.id) ? 0.25 : 1,
+              opacity: isMatching ? 1 : 0.25,
             }}
           >
             <GridTile
               user={user}
-              onClick={() => (isOwn ? onViewOwnProfile() : onViewPhoto(user))}
+              onClick={isMatching ? () => (isOwn ? onViewOwnProfile() : onViewPhoto(user)) : undefined}
               renderBottom={renderTileBottom}
               renderTopLeft={renderTileTopLeft}
               tileClassName={tileClassName}
