@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Eye, EyeOff } from 'lucide-react'
 import { RaffleStatusDisplay } from './RaffleStatusDisplay'
 import { RaffleButton } from './RaffleButton'
 import type { Raffle } from '@dating/core'
@@ -75,14 +75,15 @@ export function TopBar({
 
       {/* RIGHT: Invisible | Unlock | Refresh | Language */}
       <div className="flex items-center gap-2">
-        {/* Invisible mode toggle */}
+        {/* Invisible mode toggle — Eye (visible) / EyeOff (invisible) */}
         <button
           onClick={onToggleInvisible}
-          className={`w-7 h-7 rounded-full flex items-center justify-center nav-press text-[10px] border transition-all ${
+          className={`w-7 h-7 rounded-full flex items-center justify-center nav-press border transition-all ${
             isInvisible ? 'bg-purple-500/30 text-purple-400 border-purple-500/40' : 'bg-[#1A1A1A] text-[#8E8E93] border-[#2C2C2E]'
           }`}
+          title={isInvisible ? 'Invisible' : 'Visible'}
         >
-          {isInvisible ? '🙈' : '🐵'}
+          {isInvisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
         </button>
 
         {/* Unlock profile lock */}

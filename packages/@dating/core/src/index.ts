@@ -18,8 +18,11 @@ export {
   useAdminRecheck,
   useRaffleActions,
   useRefreshCooldown,
+  useNearbyRefresh,
   useHeartbeat,
   useFlyingMessages,
+  useGridUsers,
+  usePaymentPrompt,
   useFilterUnlock,
   useGridUnlock,
   useInvisibleMode,
@@ -27,6 +30,7 @@ export {
   useChannelFollow,
   useSyncUnlockStatus,
   useHideAge,
+  useProfileSave,
   type UseAdminRecheckOptions,
   type UseRaffleActionsOptions,
   type UseRefreshCooldownOptions,
@@ -39,6 +43,7 @@ export {
   type UseChannelFollowOptions,
   type UseSyncUnlockStatusOptions,
   type UseHideAgeOptions,
+  type UseProfileSaveOptions,
   type FlyingMessageItem,
 } from './hooks'
 
@@ -54,6 +59,7 @@ export { createAppT, type AppTResult } from './i18nFactory'
 // ─── Supabase ────────────────────────────────────────────────────────
 export {
   hasValidKey,
+  logPurchase,
   upsertUser, fetchUser, fetchNearby, setOnlineStatus, deleteUser, clearAllUsers,
   fetchUserUnlockStatus, updateInvisibleStatus, updateHideAgeStatus, updateProfileUnlockStatus,
   updateRealPhotoStatus, fetchUserPhotoStatus,
@@ -74,10 +80,11 @@ export {
   isAdminUser,
   getTimeAgo, getDistance, formatDist,
   getZodiac, getZodiacEmoji, getAge,
-  isUserActive, isProfileComplete, getMissingFields,
+  isUserActive, isRecentlyActive, isProfileComplete, getMissingFields,
   detectRealPhoto,
   dbToProfile, profileToDb,
   getPreferenceLabel, getPreferenceOptionLabel, getPreferenceColour,
+  cycleLang,
 } from './utils'
 
 // ─── Payments ────────────────────────────────────────────────────────

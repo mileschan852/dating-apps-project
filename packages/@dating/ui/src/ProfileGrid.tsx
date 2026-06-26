@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -99,13 +100,13 @@ function GridTile({
       className={`card-enter tile-aspect w-full h-full rounded-lg overflow-hidden nav-press text-left relative ${tileClassName || ''}`}
       style={{ minHeight: '68px' }}
     >
-      {/* Invisible eye icon — bottom right, only visible to admin */}
+      {/* Invisible indicator — top left, visible to everyone on own profile / admin on others */}
       {user.isInvisible && (
         <div
-          className="absolute bottom-5 right-0.5 z-40 w-3 h-3 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30 text-[7px]"
-          title="Invisible user"
+          className="absolute top-0.5 left-0.5 z-40 w-4 h-4 flex items-center justify-center rounded-full bg-purple-500/40 border border-purple-400/30"
+          title="Invisible"
         >
-          👁️‍🗨️
+          <EyeOff className="w-2.5 h-2.5 text-purple-300" />
         </div>
       )}
 

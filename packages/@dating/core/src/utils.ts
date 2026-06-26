@@ -265,3 +265,22 @@ export async function detectRealPhoto(imageUrl: string): Promise<boolean> {
     return true
   }
 }
+
+// ─── Online Status ────────────────────────────────────────────────────
+
+const ONLINE_THRESHOLD_MS = 15 * 60 * 1000
+
+export function isRecentlyActive(u: UserProfile, ownProfileId: string): boolean {
+  if (u.id === ownProfileId) return true
+  if (!u.updatedAt) return false
+  return Date.now() - new Date(u.updatedAt).getTime() < ONLINE_THRESHOLD_MS
+}
+
+// ─── Language Cycling ─────────────────────────────────────────────────
+
+export function cycleLang(current: Lang, order: Lang[], onChange: (lang: Lang) => void): Lang {
+  const idx = order.indexOf(current)
+  const next = order[(idx + 1) % order.length]
+  onChange(next)
+  return next
+}

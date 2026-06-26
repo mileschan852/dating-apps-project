@@ -60,7 +60,7 @@ function getUserId(): number | null {
   return null
 }
 // @ts-ignore
-if (typeof window !== 'undefined') window._hkmodDebug = () => _dbg
+/* debug: _dbg tracks user ID detection source */
 // Kept for backward compat
 export function setTelegramUserId(_id: number) {}
 
@@ -481,7 +481,7 @@ export function useFilterUnlock({ isAdmin, workerUrl, storageSet, storageKeys, s
   const unlockFilters = useCallback(async () => {
     const tg = getTg()
     const userId = getUserId()
-    if (!userId) { alert('D:' + _dbg); return }
+    if (!userId) { alert('Not logged in. Please open via Telegram bot.'); return }
 
     // ── Admin: toggle directly ──
     if (isAdmin) {
@@ -637,7 +637,7 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
   const toggleInvisible = useCallback(async () => {
     const tg = getTg()
     const userId = getUserId()
-    if (!userId) { alert('D:' + _dbg); return }
+    if (!userId) { alert('Not logged in. Please open via Telegram bot.'); return }
 
     // ── Admin: toggle directly ──
     if (isAdmin) {
@@ -704,9 +704,10 @@ export interface UseProfileUnlockOptions {
   storageSet: (key: string, value: string) => void | Promise<void>
   lockKey: string
   onPaid?: () => void | Promise<void>
+  onSuccess?: () => void | Promise<void>  // Called after successful payment/invoice creation
 }
 
-export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPaid }: UseProfileUnlockOptions) {
+export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPaid, onSuccess }: UseProfileUnlockOptions) {
   const [adminAction, setAdminAction] = useState<'release' | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -733,7 +734,7 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
     }
     const tg = getTg()
     const userId = getUserId()
-    if (!userId) { alert('D:' + _dbg); return }
+    if (!userId) { alert('Not logged in. Please open via Telegram bot.'); return }
     setIsLoading(true)
     try {
       const ctrl = new AbortController()
@@ -752,13 +753,14 @@ export function useProfileUnlock({ isAdmin, workerUrl, storageSet, lockKey, onPa
         // Post-payment: execute immediately (no page reload — user pays in opened link)
         await storageSet(lockKey, '0')
         if (onPaid) { try { await onPaid() } catch { /* DB persistence is best-effort */ } }
+        if (onSuccess) { try { await onSuccess() } catch { /* navigation is best-effort */ } }
         alert('Payment window opened. Complete payment in Telegram to unlock profile editing.')
       } else {
         alert('Failed to create invoice. Please try again.')
       }
     } catch { alert('Payment failed. Please try again.') }
     finally { setIsLoading(false) }
-  }, [isAdmin, workerUrl, storageSet, lockKey, onPaid])
+  }, [isAdmin, workerUrl, storageSet, lockKey, onPaid, onSuccess])
 
   const releaseLock = useCallback(async () => {
     await storageSet(lockKey, '0')
@@ -983,7 +985,7 @@ export function useSubscriptionFeature({
   const toggle = useCallback(async () => {
     const tg = getTg()
     const userId = getUserId()
-    if (!userId) { alert('D:' + _dbg); return }
+    if (!userId) { alert('Not logged in. Please open via Telegram bot.'); return }
 
     // ── Admin: always toggle directly ──
     if (isAdmin) {
@@ -1067,7 +1069,7 @@ export function useOneOffFeature({
   const unlock = useCallback(async () => {
     const tg = getTg()
     const userId = getUserId()
-    if (!userId) { alert('D:' + _dbg); return }
+    if (!userId) { alert('Not logged in. Please open via Telegram bot.'); return }
 
     // ── Admin: unlock directly ──
     if (isAdmin) {
@@ -1097,4 +1099,84 @@ export function useOneOffFeature({
   }, [isAdmin, isUnlocked, workerUrl, purpose, amount, storageSet, storageKey, updateDb, onSuccess])
 
   return { isUnlocked, setIsUnlocked, unlock }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// useProfileSave — Generic profile save + lock logic
+// ═══════════════════════════════════════════════════════════════════════
+
+export interface UseProfileSaveOptions {
+  appConfig: { showGender?: boolean; defaultGender?: string; defaultSeekingGender?: string; showHeight?: boolean; showWeight?: boolean; preferences: PreferenceCategory[] }
+  storage: { set: (key: string, value: string) => void | Promise<void> }
+  storageKeys: {
+    prefLockedAt: string
+    dob: string
+    height: string
+    weight: string
+    position: string
+    isSide: string
+    gender?: string
+    seeking?: string
+    pref1: string
+    pref2: string
+    pref3: string
+    pref4: string
+  }
+  hideAgeActive: boolean
+  upsertUser: (user: Partial<DbUser>) => Promise<DbUser | null>
+  getUserId: () => number | null
+  onLock?: () => void
+  onIncomplete?: (missing: string[]) => void
+  onSaved?: (profile: UserProfile) => void
+}
+
+export function useProfileSave({
+  appConfig,
+  storage,
+  storageKeys: CLOUD,
+  hideAgeActive,
+  upsertUser,
+  getUserId,
+  onLock,
+  onIncomplete,
+  onSaved,
+}: UseProfileSaveOptions) {
+  return useCallback((updated: UserProfile) => {
+    const tg = getTg()
+    const telegramName = tg?.initDataUnsafe?.user?.first_name
+    if (telegramName) updated.name = telegramName
+    if (!appConfig.showGender) {
+      updated.gender = appConfig.defaultGender || updated.gender
+      updated.seekingGender = appConfig.defaultSeekingGender || updated.seekingGender
+    }
+    updated.hideAge = hideAgeActive
+    onSaved?.(updated)
+    if (isProfileComplete(updated, appConfig)) {
+      storage.set(CLOUD.prefLockedAt, String(Date.now()))
+      onLock?.()
+    } else {
+      const missing = getMissingFields(updated, appConfig)
+      onIncomplete?.(missing)
+    }
+    storage.set(CLOUD.dob, updated.dob || '')
+    storage.set(CLOUD.height, String(updated.height || ''))
+    storage.set(CLOUD.weight, String(updated.weight || ''))
+    storage.set(CLOUD.position, String(updated.position || 0.5))
+    storage.set(CLOUD.isSide, updated.isSide ? '1' : '0')
+    if (updated.gender && CLOUD.gender) storage.set(CLOUD.gender, updated.gender)
+    if (updated.seekingGender && CLOUD.seeking) storage.set(CLOUD.seeking, updated.seekingGender)
+    appConfig.preferences.forEach((cat, idx) => {
+      const val = updated.preferences[cat.key]
+      if (val) {
+        const key = [CLOUD.pref1, CLOUD.pref2, CLOUD.pref3, CLOUD.pref4][idx] || CLOUD.pref1
+        storage.set(key, val)
+      }
+    })
+    const uid = getUserId()
+    if (uid && updated.lat && updated.lng) {
+      upsertUser({ ...profileToDb(updated), id: uid }).catch((err: any) =>
+        console.error('Profile upsert error:', err?.message || err)
+      )
+    }
+  }, [appConfig, storage, CLOUD, hideAgeActive, upsertUser, getUserId, onLock, onIncomplete, onSaved])
 }
