@@ -228,7 +228,7 @@ export function ProfileView({
 
           <div className="px-4 py-4 space-y-4">
 
-            {/* ═══ LOCKED SECTION: Core profile fields ═══ */}
+            {/* ═══ LOCKED SECTION: Core profile fields (locked after save) ═══ */}
             <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>
               {/* ── Gender (if visible) ── */}
               {appConfig.showGender && (
@@ -260,64 +260,63 @@ export function ProfileView({
                 </div>
               )}
 
-              {/* ── DOB + Hide Age (same line) ── */}
+              {/* ── Hide Age + DOB (same line) ── */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <FieldLabel label={t(lang, 'dateOfBirth')} />
+                  <div className="flex items-center gap-2">
+                    <FieldLabel label={t(lang, 'dateOfBirth')} />
+                    {draft.dob && <span className="text-[#8E8E93] text-[10px]">{getAge(draft.dob)}y · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</span>}
+                  </div>
                   {appConfig.showAge && (
-                    <label className="flex items-center gap-1.5 cursor-pointer">
+                    <label className="flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" checked={hideAgeActive}
                         onChange={() => { if (onToggleHideAge) onToggleHideAge() }}
-                        className="w-3.5 h-3.5 rounded accent-[var(--app-primary)]" />
-                      <span className="text-[10px] text-[#8E8E93]">Hide age</span>
-                      {!hideAgeActive && profileLocked && <Lock className="w-3 h-3 text-[#8E8E93]" />}
+                        className="w-3 h-3 rounded accent-[var(--app-primary)]" />
+                      <span className="text-[10px] text-[#8E8E93]">Hide</span>
                     </label>
                   )}
                 </div>
                 <input type="date" value={draft.dob || ''}
                   onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
-                  className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
-                {draft.dob && <p className="text-[#8E8E93] text-[10px] mt-1">{getAge(draft.dob)} years · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</p>}
+                  className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
               </div>
 
-              {/* ── Height + Weight ── */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <FieldLabel label={t(lang, 'height') + ' (cm)'} />
-                  <input type="number" value={draft.height || ''} onChange={e => updateDraft('height', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
+              {/* ── Height + Weight (compact, cm/kg inline) ── */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 flex items-center gap-1">
+                  <input type="number" value={draft.height || ''} placeholder="H"
+                    onChange={e => updateDraft('height', Number(e.target.value))}
+                    className="flex-1 h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
+                  <span className="text-[10px] text-[#8E8E93]">cm</span>
                 </div>
-                <div className="space-y-1.5">
-                  <FieldLabel label={t(lang, 'weight') + ' (kg)'} />
-                  <input type="number" value={draft.weight || ''} onChange={e => updateDraft('weight', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
+                <div className="flex-1 flex items-center gap-1">
+                  <input type="number" value={draft.weight || ''} placeholder="W"
+                    onChange={e => updateDraft('weight', Number(e.target.value))}
+                    className="flex-1 h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
+                  <span className="text-[10px] text-[#8E8E93]">kg</span>
                 </div>
               </div>
 
-              {/* ── Position slider (0.1 ticks) + Side checkbox ── */}
+              {/* ── Role slider + Side checkbox (same line) ── */}
               {appConfig.showPosition && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <FieldLabel label="Role" />
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="checkbox" checked={draft.isSide}
-                        onChange={e => { updateDraft('isSide', e.target.checked); if (e.target.checked) updateDraft('position', 0.5) }}
-                        className="w-3.5 h-3.5 rounded accent-[var(--app-primary)]" />
-                      <span className="text-[10px] text-[#8E8E93]">Side</span>
-                    </label>
-                  </div>
-                  <div className={`flex items-center gap-2 ${draft.isSide ? 'opacity-40 pointer-events-none select-none' : ''}`}>
-                    <span className="text-blue-400 text-[10px] font-bold w-12 text-right">Bottom</span>
+                <div className="space-y-1">
+                  <FieldLabel label="Role" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-400 text-[8px] font-bold">B</span>
                     <div className="flex-1 relative">
                       <input type="range" min="0" max="1" step="0.1"
                         value={draft.isSide ? 0.5 : (draft.position ?? 0)}
                         disabled={draft.isSide}
                         onChange={e => updateDraft('position', Number(e.target.value))}
-                        className="w-full accent-[var(--app-primary)]" />
-                      <div className="flex justify-between text-[8px] text-[#8E8E93] mt-0.5 px-0.5">
-                        <span>0</span><span>0.1</span><span>0.2</span><span>0.3</span><span>0.4</span>
-                        <span>0.5</span><span>0.6</span><span>0.7</span><span>0.8</span><span>0.9</span><span>1</span>
-                      </div>
+                        className="w-full accent-[var(--app-primary)] h-4" />
                     </div>
-                    <span className="text-orange-400 text-[10px] font-bold w-12">Top</span>
+                    <span className="text-orange-400 text-[8px] font-bold">T</span>
+                    <label className="flex items-center gap-1 cursor-pointer ml-1">
+                      <input type="checkbox" checked={draft.isSide}
+                        onChange={e => { updateDraft('isSide', e.target.checked); if (e.target.checked) updateDraft('position', 0.5) }}
+                        className="w-3 h-3 rounded accent-[var(--app-primary)]" />
+                      <span className="text-[10px] text-[#8E8E93]">Side</span>
+                    </label>
                   </div>
                   {(() => {
                     const p = draft.position ?? 0.5
@@ -332,31 +331,15 @@ export function ProfileView({
                   })()}
                 </div>
               )}
-            </div>
 
-            {/* ═══ All Preferences on one line ═══ */}
-            <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>
-              <div className="flex items-center justify-between mb-1.5">
-                <FieldLabel label="Preferences" />
-                <span className="text-[10px] text-[#5AC8FA]">click to change</span>
-              </div>
+              {/* ═══ 3 Preferences in one row (no left labels) ═══ */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 {appConfig.preferences.map(cat => {
                   const currentVal = draft.preferences[cat.key] || cat.defaultValue
                   const currentOpt = cat.options.find(o => o.value === currentVal)
-                  const handleClick = () => {
-                    if (cat.key === 'party' && profileLocked) {
-                      // Locked: toggle Party ↔ PartyPlus only
-                      const nextVal = currentVal === 'PartyPlus' ? 'Party' : 'PartyPlus'
-                      updateDraft('preferences', { ...draft.preferences, party: nextVal })
-                    } else {
-                      cyclePreference(cat)
-                    }
-                  }
                   return (
-                    <button key={cat.key} onClick={handleClick}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
-                      title={`${cat.label[lang] || cat.label['en']}: ${currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}`}>
+                    <button key={cat.key} onClick={() => cyclePreference(cat)}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
                       {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
                     </button>
                   )
