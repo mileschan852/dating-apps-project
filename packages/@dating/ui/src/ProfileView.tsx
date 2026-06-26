@@ -44,16 +44,22 @@ export function ProfileView({
   const [draft, setDraft] = useState<UserProfile>({ ...user })
   const [saved, setSaved] = useState(false)
 
-  // Full reset when switching users — auto-fill name and photo from Telegram
+  // Full reset when switching users — auto-fill name, photo, and preference defaults
   useEffect(() => {
     const tgName = tgUser?.first_name || ''
     const photo = tgPhoto || user.tgPhotoUrl || ''
+    // Ensure preferences have values (default from appConfig if not set)
+    const defaults: Record<string, string> = {}
+    appConfig.preferences.forEach(cat => {
+      if (!user.preferences[cat.key]) defaults[cat.key] = cat.defaultValue
+    })
     setDraft({
       ...user,
       name: user.name || tgName,
       tgPhotoUrl: photo,
       tgPhotos: photo ? [photo] : user.tgPhotos,
       hasPhoto: user.hasPhoto || !!photo,
+      preferences: { ...user.preferences, ...defaults },
     })
   }, [user.id])
 
@@ -260,25 +266,23 @@ export function ProfileView({
                 </div>
               )}
 
-              {/* ── Hide Age + DOB (same line) ── */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FieldLabel label={t(lang, 'dateOfBirth')} />
-                    {draft.dob && <span className="text-[#8E8E93] text-[10px]">{getAge(draft.dob)}y · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</span>}
-                  </div>
+              {/* ── DOB (short) + Age/Zodiac/Hide Age (same line) ── */}
+              <div className="space-y-1">
+                <FieldLabel label={t(lang, 'dateOfBirth')} />
+                <input type="date" value={draft.dob || ''}
+                  onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
+                  className="w-full h-7 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-xs [color-scheme:dark]" />
+                <div className="flex items-center gap-2">
+                  {draft.dob && <span className="text-[#8E8E93] text-[10px]">{getAge(draft.dob)}y · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</span>}
                   {appConfig.showAge && (
-                    <label className="flex items-center gap-1 cursor-pointer">
+                    <label className="flex items-center gap-1.5 cursor-pointer ml-auto">
                       <input type="checkbox" checked={hideAgeActive}
                         onChange={() => { if (onToggleHideAge) onToggleHideAge() }}
-                        className="w-3 h-3 rounded accent-[var(--app-primary)]" />
-                      <span className="text-[10px] text-[#8E8E93]">Hide</span>
+                        className="w-4 h-4 rounded accent-[var(--app-primary)]" />
+                      <span className="text-[10px] text-[#8E8E93]">Hide age</span>
                     </label>
                   )}
                 </div>
-                <input type="date" value={draft.dob || ''}
-                  onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
-                  className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
               </div>
 
               {/* ── Height + Weight (half width, labels above) ── */}
@@ -288,7 +292,7 @@ export function ProfileView({
                   <div className="flex items-center gap-1">
                     <input type="number" value={draft.height || ''} placeholder="0"
                       onChange={e => updateDraft('height', Number(e.target.value))}
-                      className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
+                      className="w-full h-7 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
                     <span className="text-[10px] text-[#8E8E93]">cm</span>
                   </div>
                 </div>
@@ -297,13 +301,13 @@ export function ProfileView({
                   <div className="flex items-center gap-1">
                     <input type="number" value={draft.weight || ''} placeholder="0"
                       onChange={e => updateDraft('weight', Number(e.target.value))}
-                      className="w-full h-8 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
+                      className="w-full h-7 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-2 text-white text-sm text-center" />
                     <span className="text-[10px] text-[#8E8E93]">kg</span>
                   </div>
                 </div>
               </div>
 
-              {/* ── Role: label + word on same line, slider + Side checkbox underneath ── */}
+              {/* ── Role: label + word inline, slider with 0.1 ticks, Side checkbox (bigger) ── */}
               {appConfig.showPosition && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -320,7 +324,7 @@ export function ProfileView({
                       return <span className="text-[var(--app-primary)] text-[10px] font-medium">· {word}</span>
                     })()}
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <span className="text-blue-400 text-[8px] font-bold">B</span>
                     <div className="flex-1 relative">
                       <input type="range" min="0" max="1" step="0.1"
@@ -328,30 +332,46 @@ export function ProfileView({
                         disabled={draft.isSide}
                         onChange={e => updateDraft('position', Number(e.target.value))}
                         className="w-full accent-[var(--app-primary)] h-4" />
+                      {/* 0.1 tick marks */}
+                      <div className="flex justify-between text-[7px] text-[#8E8E93] mt-0.5 px-0.5">
+                        <span>0</span><span>.1</span><span>.2</span><span>.3</span><span>.4</span>
+                        <span>.5</span><span>.6</span><span>.7</span><span>.8</span><span>.9</span><span>1</span>
+                      </div>
                     </div>
                     <span className="text-orange-400 text-[8px] font-bold">T</span>
-                    <label className="flex items-center gap-1 cursor-pointer ml-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer ml-1">
                       <input type="checkbox" checked={draft.isSide}
                         onChange={e => { updateDraft('isSide', e.target.checked); if (e.target.checked) updateDraft('position', 0.5) }}
-                        className="w-3 h-3 rounded accent-[var(--app-primary)]" />
+                        className="w-4 h-4 rounded accent-[var(--app-primary)]" />
                       <span className="text-[10px] text-[#8E8E93]">Side</span>
                     </label>
                   </div>
                 </div>
               )}
 
-              {/* ═══ 3 Preferences in one row (right underneath role) ═══ */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {appConfig.preferences.map(cat => {
-                  const currentVal = draft.preferences[cat.key] || cat.defaultValue
-                  const currentOpt = cat.options.find(o => o.value === currentVal)
-                  return (
-                    <button key={cat.key} onClick={() => cyclePreference(cat)}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-                      {currentOpt?.label[lang] || currentOpt?.label['en'] || currentVal}
-                    </button>
-                  )
-                })}
+              {/* ═══ PREFERENCES: 3 toggles in one row ═══ */}
+              <div>
+                <span className="text-[10px] text-[#8E8E93] font-medium uppercase tracking-wider">Preferences</span>
+                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                  {appConfig.preferences.map(cat => {
+                    const currentVal = draft.preferences[cat.key] || cat.defaultValue
+                    return (
+                      <div key={cat.key} className="flex items-center gap-1">
+                        {cat.options.map(opt => (
+                          <button key={opt.value}
+                            onClick={() => updateDraft('preferences', { ...draft.preferences, [cat.key]: opt.value })}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold nav-press transition-all ${
+                              currentVal === opt.value
+                                ? (opt.colour || 'bg-[var(--app-primary)]/20 text-[var(--app-primary)]')
+                                : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
+                            }`}>
+                            {opt.label[lang] || opt.label['en'] || opt.value}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 

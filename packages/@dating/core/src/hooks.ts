@@ -671,7 +671,7 @@ export function useInvisibleMode({ isAdmin, workerUrl, storageSet, storageGet, s
         setInvisibleActive(true)
         await storageSet(storageKey, 'true')
         await updateDb(userId, until)
-      } catch (e: any) { alert('Save error: ' + (e?.message || 'Failed to save')) }
+      } catch (e: any) { console.error('Invisible save error:', e?.message || e) }
     }
   }, [isAdmin, isInvisible, hasPurchasedInvisible, invisibleActive, workerUrl, storageSet, storageKey, updateDb])
 
