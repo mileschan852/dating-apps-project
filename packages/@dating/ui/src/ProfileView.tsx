@@ -44,7 +44,7 @@ export function ProfileView({
   const [draft, setDraft] = useState<UserProfile>({ ...user })
   const [saved, setSaved] = useState(false)
 
-  // Full reset when switching users — auto-fill name and photo from Telegram (stable improvement)
+  // Full reset when switching users — auto-fill name and photo from Telegram
   useEffect(() => {
     const tgName = tgUser?.first_name || ''
     const photo = tgPhoto || user.tgPhotoUrl || ''
@@ -57,7 +57,7 @@ export function ProfileView({
     })
   }, [user.id])
 
-  // Photo: ONLY from Telegram — no logo fallback (stable improvement)
+  // Photo: ONLY from Telegram — no logo fallback
   const displayPhotos = tgPhoto ? [tgPhoto] : []
 
   useEffect(() => { setImgStates(displayPhotos.map(() => ({ loaded: false, failed: false }))); setActiveIdx(0) }, [tgPhoto])
@@ -83,7 +83,7 @@ export function ProfileView({
   const zodiacEmoji = zodiacSign ? getZodiacEmoji(zodiacSign) : null
   const userAge = user.dob ? getAge(user.dob) : user.age
 
-  // Helper to get current role label (stable pattern — moved out of JSX)
+  // Helper to get current role label (stable pattern)
   const getCurrentRoleLabel = (isSide: boolean, position: number | undefined) => {
     if (isSide) return 'Side'
     const p = position ?? 0.5
@@ -231,98 +231,69 @@ export function ProfileView({
 
           <div className="px-4 py-4 space-y-4">
 
-            {/* ═══ LOCKED SECTION: Core profile fields ═══ */}
-            <div className={profileLocked ? 'opacity-40 pointer-events-none select-none' : ''}>
-              {/* ── Gender (if visible) ── */}
-              {appConfig.showGender && (
-                <div className="space-y-1.5">
-                  <FieldLabel label="Gender" />
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['Male', 'Female', 'Non-binary'] as const).map(g => (
-                      <button key={g} onClick={() => updateDraft('gender', g)}
-                        className={`h-10 rounded-lg text-sm font-medium nav-press transition-all ${draft.gender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93]'}`}>
-                        {g === 'Male' ? '♂ Male' : g === 'Female' ? '♀ Female' : '⚧ Non-binary'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Seeking (if visible) ── */}
-              {appConfig.showGender && (
-                <div className="space-y-1.5">
-                  <FieldLabel label="Seeking Gender" />
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['Men', 'Women', 'Everyone'] as const).map(g => (
-                      <button key={g} onClick={() => updateDraft('seekingGender', g)}
-                        className={`h-10 rounded-lg text-sm font-medium nav-press transition-all ${draft.seekingGender === g ? 'gradient-btn text-white' : 'bg-[#1A1A1A] border border-[#2C2C2E] text-[#8E8E93]'}`}>
-                        {g === 'Men' ? '♂ Men' : g === 'Women' ? '♀ Women' : '⚤ Everyone'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ── DOB ── */}
-              <div className="space-y-1.5">
-                <FieldLabel label={t(lang, 'dateOfBirth')} />
-                <input type="date" value={draft.dob || ''}
-                  onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }}
-                  className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
-                {draft.dob && <p className="text-[#8E8E93] text-[10px] mt-1">{getAge(draft.dob)} years · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</p>}
+            {/* Compact DOB + Age/Zodiac + Hide Age (general improvement, not app-specific) */}
+            <div className="space-y-1.5">
+              <FieldLabel label={t(lang, 'dateOfBirth')} />
+              <div className="flex items-center gap-2">
+                <input type="date" value={draft.dob || ''} onChange={e => { updateDraft('dob', e.target.value); updateDraft('age', getAge(e.target.value)) }} className="flex-1 h-9 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm [color-scheme:dark]" />
+                {draft.dob && <span className="text-[#8E8E93] text-xs">{getAge(draft.dob)}y · {getZodiac(draft.dob)} {getZodiacEmoji(getZodiac(draft.dob))}</span>}
+                {appConfig.showAge && (
+                  <label className="flex items-center gap-1 text-xs text-[#8E8E93] cursor-pointer ml-auto">
+                    <input type="checkbox" checked={hideAgeActive} onChange={() => { if (onToggleHideAge) onToggleHideAge() }} className="accent-[var(--app-primary)]" />
+                    Hide age
+                  </label>
+                )}
               </div>
-
-              {/* ── Height + Weight ── */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <FieldLabel label={t(lang, 'height') + ' (cm)'} />
-                  <input type="number" value={draft.height || ''} onChange={e => updateDraft('height', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <FieldLabel label={t(lang, 'weight') + ' (kg)'} />
-                  <input type="number" value={draft.weight || ''} onChange={e => updateDraft('weight', Number(e.target.value))} className="w-full h-10 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
-                </div>
-              </div>
-
-              {/* ── Position: Side toggle + slider ── */}
-              {appConfig.showPosition && (
-                <div className="space-y-1.5">
-                  <FieldLabel label="Position" />
-                  {/* Side toggle */}
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => { updateDraft('isSide', !draft.isSide); if (!draft.isSide) updateDraft('position', 0.5) }}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${draft.isSide ? 'bg-gray-500 text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
-                      Side
-                    </button>
-                    {(() => {
-                      const p = draft.position ?? 0.5
-                      let currentLabel = 'V'
-                      let currentColour = 'bg-purple-500 text-white'
-                      if (p === 0) { currentLabel = 'B'; currentColour = 'bg-blue-500 text-white' }
-                      else if (p <= 0.4) { currentLabel = 'VB'; currentColour = 'bg-blue-400 text-white' }
-                      else if (p === 0.5) { currentLabel = 'V'; currentColour = 'bg-purple-500 text-white' }
-                      else if (p <= 0.9) { currentLabel = 'VT'; currentColour = 'bg-orange-400 text-white' }
-                      else { currentLabel = 'T'; currentColour = 'bg-orange-500 text-white' }
-                      return <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${currentColour} ${draft.isSide ? 'opacity-40' : ''}`}>{currentLabel}</span>
-                    })()}
-                  </div>
-                  {/* Slider — greyed out when Side selected */}
-                  <div className={`flex items-center gap-3 ${draft.isSide ? 'opacity-40 pointer-events-none select-none' : ''}`}>
-                    <span className="text-blue-400 text-[10px] font-bold">B</span>
-                    <input type="range" min="0" max="1" step="0.1" value={draft.position ?? 0.5}
-                      onChange={e => updateDraft('position', Number(e.target.value))}
-                      className="flex-1 accent-[var(--app-primary)]" />
-                    <span className="text-orange-400 text-[10px] font-bold">T</span>
-                  </div>
-                  <div className="flex justify-between text-[10px] text-[#8E8E93]">
-                    <span>0 B</span><span>0.1-0.4 VB</span><span>0.5 V</span><span>0.6-0.9 VT</span><span>1 T</span>
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* ── Hide Age Toggle ── */}
+            {/* Height + Weight */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <FieldLabel label={t(lang, 'height') + ' (cm)'} />
+                <input type="number" value={draft.height || ''} onChange={e => updateDraft('height', Number(e.target.value))} className="w-full h-9 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel label={t(lang, 'weight') + ' (kg)'} />
+                <input type="number" value={draft.weight || ''} onChange={e => updateDraft('weight', Number(e.target.value))} className="w-full h-9 bg-[#1A1A1A] border border-[#2C2C2E] rounded-lg px-3 text-white text-sm" />
+              </div>
+            </div>
+
+            {/* Position + Side (base, can be customized per app) */}
+            {appConfig.showPosition && (
+              <div className="space-y-1.5">
+                <FieldLabel label="Position" />
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => { updateDraft('isSide', !draft.isSide); if (!draft.isSide) updateDraft('position', 0.5) }}
+                    className={`px-3 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${draft.isSide ? 'bg-gray-500 text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
+                    Side
+                  </button>
+                  {(() => {
+                    const p = draft.position ?? 0.5
+                    let currentLabel = 'V'
+                    let currentColour = 'bg-purple-500 text-white'
+                    if (p === 0) { currentLabel = 'B'; currentColour = 'bg-blue-500 text-white' }
+                    else if (p <= 0.4) { currentLabel = 'VB'; currentColour = 'bg-blue-400 text-white' }
+                    else if (p === 0.5) { currentLabel = 'V'; currentColour = 'bg-purple-500 text-white' }
+                    else if (p <= 0.9) { currentLabel = 'VT'; currentColour = 'bg-orange-400 text-white' }
+                    else { currentLabel = 'T'; currentColour = 'bg-orange-500 text-white' }
+                    return <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${currentColour} ${draft.isSide ? 'opacity-40' : ''}`}>{currentLabel}</span>
+                  })()}
+                </div>
+                <div className={`flex items-center gap-3 ${draft.isSide ? 'opacity-40 pointer-events-none select-none' : ''}`}>
+                  <span className="text-blue-400 text-[10px] font-bold">B</span>
+                  <input type="range" min="0" max="1" step="0.1" value={draft.position ?? 0.5}
+                    onChange={e => updateDraft('position', Number(e.target.value))}
+                    className="flex-1 accent-[var(--app-primary)]" />
+                  <span className="text-orange-400 text-[10px] font-bold">T</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-[#8E8E93]">
+                  <span>0 B</span><span>0.1-0.4 VB</span><span>0.5 V</span><span>0.6-0.9 VT</span><span>1 T</span>
+                </div>
+              </div>
+            )}
+
+            {/* Hide Age Toggle (general) */}
             {appConfig.showAge && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -337,7 +308,7 @@ export function ProfileView({
               </div>
             )}
 
-            {/* ── Preferences: ALL categories, single toggle buttons, 1 row ── */}
+            {/* Preferences (base) */}
             <div className="space-y-1.5">
               <FieldLabel label="Preferences" />
               <div className="flex flex-wrap gap-1.5">
