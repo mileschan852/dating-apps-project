@@ -1,16 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { buildGridList } from '@dating/core';
-
-// Example updated usage in app-base
+import { useGridFilters } from './hooks/useGridFilters';
 
 function App() {
-  // ...
+  const [users, setUsers] = useState([]);
+  const [ownProfile, setOwnProfile] = useState(null);
+  const [unlockedSlots, setUnlockedSlots] = useState(3);
+
+  const { filters, setOnlineOnly, setHasPicOnly, resetFilters, hasActiveFilters } = useGridFilters();
+
+  // ... load users logic ...
+
   const { matching, nonMatching } = buildGridList({
     ownProfile,
     allUsers: users,
-    filters,
-    appConfig,
-    isRecentlyActive,
+    filters: {
+      onlineOnly: filters.onlineOnly,
+      hasPic: filters.hasPicOnly,
+      ...filters.prefFilters,
+    },
+    // ... other params
   });
 
   return (

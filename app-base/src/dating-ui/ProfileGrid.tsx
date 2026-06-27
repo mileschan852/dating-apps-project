@@ -1,14 +1,6 @@
 import React from 'react';
 
-// Updated ProfileGrid with dividing bar logic
-
-export function ProfileGrid({
-  matchingUsers,
-  nonMatchingUsers,
-  unlockedSlots,
-  onPromptUnlock,
-  // ... other props
-}: any) {
+export function ProfileGrid({ matchingUsers, nonMatchingUsers, unlockedSlots, onPromptUnlock, ...props }) {
   const allUsers = [...matchingUsers, ...nonMatchingUsers];
   const unlocked = allUsers.slice(0, unlockedSlots);
   const locked = allUsers.slice(unlockedSlots);
@@ -16,9 +8,7 @@ export function ProfileGrid({
   return (
     <div className="grid grid-cols-5 gap-1.5">
       {/* Unlocked users */}
-      {unlocked.map((user, idx) => (
-        <div key={user.id}> {/* render tile */} </div>
-      ))}
+      {unlocked.map((user, idx) => <div key={user.id}>Tile</div>)}
 
       {/* Dividing Bar */}
       {unlockedSlots < 100 && (
@@ -27,10 +17,8 @@ export function ProfileGrid({
         </div>
       )}
 
-      {/* Locked users (greyed) */}
-      {locked.map((user) => (
-        <div key={user.id} className="opacity-30"> {/* render tile */} </div>
-      ))}
+      {/* Locked users */}
+      {locked.map((user) => <div key={user.id} className="opacity-30">Tile</div>)}
     </div>
   );
 }
