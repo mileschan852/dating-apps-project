@@ -1,10 +1,44 @@
 import type { AppConfig, UserProfile } from './types';
 
+// =====================================================
+// USER STATUS UTILITIES
+// =====================================================
+
 /**
- * Converts raw DB row to clean UserProfile
+ * Check if a user was recently active (within last 30 minutes)
+ */
+export function isUserActive(user: any): boolean {
+  if (!user?.updatedAt) return false;
+  const lastActive = new Date(user.updatedAt).getTime();
+  const now = Date.now();
+  const thirtyMinutes = 30 * 60 * 1000;
+  return (now - lastActive) < thirtyMinutes;
+}
+
+/**
+ * Check if user is an admin
+ */
+export function isAdminUser(
+  user: any, 
+  adminIds: number[] = [], 
+  adminUsernames: string[] = []
+): boolean {
+  if (!user) return false;
+  if (adminIds.includes(user.id)) return true;
+  if (user.username && adminUsernames.includes(user.username)) return true;
+  return false;
+}
+
+// =====================================================
+// DATA TRANSFORMATION
+// =====================================================
+
+/**
+ * Convert raw database row into clean UserProfile object
  */
 export function dbToProfile(raw: any): UserProfile {
   if (!raw) return {} as UserProfile;
+
   return {
     id: raw.id,
     name: raw.name || raw.tg_first_name || '',
@@ -28,79 +62,149 @@ export function dbToProfile(raw: any): UserProfile {
   } as UserProfile;
 }
 
-/**
- * Admin check helper
- */
-export function isAdminUser(user: any, adminIds: number[] = [], adminUsernames: string[] = []): boolean {
-  if (!user) return false;
-  if (adminIds.includes(user.id)) return true;
-  if (user.username && adminUsernames.includes(user.username)) return true;
-  return false;
-}
+// =====================================================
+// PREFERENCE & DATA MIGRATION
+// =====================================================
 
 /**
- * Migrate old user data to current structure
+ * Migrate old user data structure to current format
  */
 export function migrateUserPreferences(rawUser: any, appConfig: AppConfig): UserProfile {
   const prefs: Record<string, string> = {};
-  if (rawUser.preferences) Object.assign(prefs, rawUser.preferences);
-  if (rawUser.safetyLevel && !prefs.safety) prefs.safety = rawUser.safetyLevel;
+
+  if (rawUser.preferences) {
+    Object.assign(prefs, rawUser.preferences);
+  }
+
+  if (rawUser.safetyLevel && !prefs.safety) {
+    prefs.safety = rawUser.safetyLevel;
+  }
+
   if (appConfig?.preferences) {
     for (const cat of appConfig.preferences) {
-      if (!prefs[cat.key]) prefs[cat.key] = cat.defaultValue || cat.options?.[0]?.value || '';
+      if (!prefs[cat.key]) {
+        prefs[cat.key] = cat.defaultValue || cat.options?.[0]?.value || '';
+      }
     }
   }
-  return { ...rawUser, preferences: prefs, hasRealPhoto: rawUser.hasRealPhoto ?? rawUser.hasPhoto ?? false } as UserProfile;
+
+  return {
+    ...rawUser,
+    preferences: prefs,
+    hasRealPhoto: rawUser.hasRealPhoto ?? rawUser.hasPhoto ?? false,
+  } as UserProfile;
 }
 
-/**
- * Build filtered + sorted list for the grid (matching first, then non-matching by distance)
- */
+// =====================================================
+// GRID FILTERING & SORTING
+// =====================================================
+
+export interface BuildGridListResult<T> {
+  matching: T[];
+  nonMatching: T[];
+  matchingCount: number;
+}
+
 export function buildGridList<T extends {
-  id: string; distance?: number; updatedAt?: string; hasRealPhoto?: boolean;
-  isSide?: boolean; position?: number; preferences: Record<string, string>; [key: string]: any;
+  id: string;
+  distance?: number;
+  updatedAt?: string;
+  hasRealPhoto?: boolean;
+  isSide?: boolean;
+  position?: number;
+  preferences: Record<string, string>;
+  [key: string]: any;
 }>({
-  ownProfile, allUsers, filters, appConfig, isRecentlyActive, maxUsers = 100
+  ownProfile,
+  allUsers,
+  filters,
+  appConfig,
+  isRecentlyActive,
+  maxUsers = 100,
 }: {
-  ownProfile: T; allUsers: T[]; filters: Record<string, string | boolean>;
-  appConfig: any; isRecentlyActive: (u: T) => boolean; maxUsers?: number;
-}) {
-  const sorted = [ownProfile, ...allUsers.filter(u => u.id !== ownProfile.id)]
+  ownProfile: T;
+  allUsers: T[];
+  filters: Record<string, string | boolean>;
+  appConfig: AppConfig;
+  isRecentlyActive: (user: T) => boolean;
+  maxUsers?: number;
+}): BuildGridListResult<T> {
+
+  // Sort by distance (closest first)
+  const sortedUsers = [ownProfile, ...allUsers.filter(u => u.id !== ownProfile.id)]
     .sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
 
   const matching: T[] = [];
   const nonMatching: T[] = [];
 
-  for (const u of sorted) {
-    let ok = true;
-    if (filters.onlineOnly && !isRecentlyActive(u)) ok = false;
-    if (filters.hasPic === true && !u.hasRealPhoto) ok = false;
+  for (const user of sortedUsers) {
+    let matches = true;
 
-    if (ok && filters.role && filters.role !== 'All') {
-      const r = filters.role as string;
-      if (r === 'Side') { if (!u.isSide) ok = false; }
-      else {
-        if (u.isSide) ok = false;
-        const p = u.position ?? 0.5;
-        if (r === 'Bottom' && p !== 0) ok = false;
-        if (r === 'VB' && (p <= 0 || p > 0.5)) ok = false;
-        if (r === 'V' && p !== 0.5) ok = false;
-        if (r === 'VT' && (p <= 0.5 || p > 1)) ok = false;
-        if (r === 'T' && p !== 1) ok = false;
-      }
+    // Online filter
+    if (filters.onlineOnly && !isRecentlyActive(user)) {
+      matches = false;
     }
 
-    if (ok && appConfig?.preferences) {
-      for (const cat of appConfig.preferences) {
-        const sel = filters[cat.key];
-        if (sel && sel !== 'All' && u.preferences?.[cat.key] !== sel) { ok = false; break; }
-      }
+    // Has photo filter
+    if (matches && filters.hasPic === true && !user.hasRealPhoto) {
+      matches = false;
     }
-    if (ok) matching.push(u); else nonMatching.push(u);
+
+    // Role filter
+    if (matches && filters.role && filters.role !== 'All') {
+      matches = matchesRoleFilter(user, filters.role as string);
+    }
+
+    // Preference filters
+    if (matches && appConfig?.preferences) {
+      matches = matchesPreferenceFilters(user, filters, appConfig);
+    }
+
+    if (matches) {
+      matching.push(user);
+    } else {
+      nonMatching.push(user);
+    }
   }
 
-  let result = [...matching];
-  if (result.length < maxUsers) result.push(...nonMatching.slice(0, maxUsers - result.length));
+  return {
+    matching,
+    nonMatching,
+    matchingCount: matching.length,
+  };
+}
 
-  return { gridUsers: result, matchingCount: matching.length, totalShown: result.length };
+// --- Private helper functions ---
+
+function matchesRoleFilter(user: any, roleFilter: string): boolean {
+  if (!roleFilter || roleFilter === 'All') return true;
+
+  const p = user.position ?? 0.5;
+  const isSide = user.isSide ?? false;
+
+  if (roleFilter === 'Side') return isSide;
+  if (isSide) return false;
+
+  switch (roleFilter) {
+    case 'Bottom': return p === 0;
+    case 'VB':     return p > 0 && p <= 0.5;
+    case 'V':      return p === 0.5;
+    case 'VT':     return p > 0.5 && p < 1;
+    case 'T':      return p === 1;
+    default:       return true;
+  }
+}
+
+function matchesPreferenceFilters(
+  user: any,
+  filters: Record<string, string | boolean>,
+  appConfig: AppConfig
+): boolean {
+  for (const cat of appConfig.preferences || []) {
+    const selected = filters[cat.key];
+    if (selected && selected !== 'All' && user.preferences?.[cat.key] !== selected) {
+      return false;
+    }
+  }
+  return true;
 }
