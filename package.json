@@ -6,7 +6,8 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "dev:base": "turbo run dev --filter=app-base",
-    "publish:packages": "pnpm publish -r --filter=@dating/* --access public"
+    "publish:packages": "pnpm publish -r --filter=@dating/* --access public",
+    "sync": "./scripts/sync-to-app.sh"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
