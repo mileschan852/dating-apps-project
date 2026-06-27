@@ -44,7 +44,7 @@ export function ProfileView({
   const [draft, setDraft] = useState<UserProfile>({ ...user })
   const [saved, setSaved] = useState(false)
 
-  // Full reset when switching users — auto-fill name and photo from Telegram
+  // Full reset when switching users — auto-fill name and photo from Telegram (stable improvement)
   useEffect(() => {
     const tgName = tgUser?.first_name || ''
     const photo = tgPhoto || user.tgPhotoUrl || ''
@@ -57,8 +57,7 @@ export function ProfileView({
     })
   }, [user.id])
 
-  // Photo: ONLY from Telegram — no logo fallback
-  // Photo: ONLY from Telegram hook — no logo fallback
+  // Photo: ONLY from Telegram — no logo fallback (stable improvement)
   const displayPhotos = tgPhoto ? [tgPhoto] : []
 
   useEffect(() => { setImgStates(displayPhotos.map(() => ({ loaded: false, failed: false }))); setActiveIdx(0) }, [tgPhoto])
@@ -83,6 +82,17 @@ export function ProfileView({
   const zodiacSign = user.dob ? getZodiac(user.dob) : null
   const zodiacEmoji = zodiacSign ? getZodiacEmoji(zodiacSign) : null
   const userAge = user.dob ? getAge(user.dob) : user.age
+
+  // Helper to get current role label (stable pattern — moved out of JSX)
+  const getCurrentRoleLabel = (isSide: boolean, position: number | undefined) => {
+    if (isSide) return 'Side'
+    const p = position ?? 0.5
+    if (p === 0) return 'B'
+    if (p <= 0.4) return 'VB'
+    if (p === 0.5) return 'V'
+    if (p <= 0.9) return 'VT'
+    return 'T'
+  }
 
   // ── Photo Section ──────────────────────────────────────────────────
   const PhotoSection = ({ size = 'large' }: { size?: 'large' | 'small' }) => (
@@ -171,7 +181,7 @@ export function ProfileView({
       {appConfig.showPosition && (
         user.isSide ? <span className="text-gray-400 font-bold">Side</span> :
         user.position !== undefined ? <span className="text-[var(--app-primary)] font-bold">
-          {(() => { const p = user.position!; if (p === 0) return 'B'; if (p <= 0.4) return 'VB'; if (p === 0.5) return 'V'; if (p <= 0.9) return 'VT'; return 'T' })()}
+          {getCurrentRoleLabel(user.isSide, user.position)}
         </span> : null
       )}
       {/* Preferences */}
@@ -191,9 +201,9 @@ export function ProfileView({
   // ═════════════════════════════════════════════════════════════════════
 
   // Helper: cycle preference to next option
-  const cyclePreference = (cat: PreferenceCategory) => {
+  const cyclePreference = (cat: any) => {
     const current = draft.preferences[cat.key] || cat.defaultValue
-    const idx = cat.options.findIndex(o => o.value === current)
+    const idx = cat.options.findIndex((o: any) => o.value === current)
     const next = cat.options[(idx + 1) % cat.options.length]
     updateDraft('preferences', { ...draft.preferences, [cat.key]: next.value })
   }
@@ -282,21 +292,11 @@ export function ProfileView({
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => { updateDraft('isSide', !draft.isSide); if (!draft.isSide) updateDraft('position', 0.5) }}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${
-                        draft.isSide ? 'bg-gray-500 text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'
-                      }`}>
+                      className={`px-3 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${draft.isSide ? 'bg-gray-500 text-white' : 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}>
                       Side
                     </button>
                     {(() => {
                       const p = draft.position ?? 0.5
-                      const labels = [
-                        { label: 'B', colour: 'bg-blue-500 text-white' },
-                        { label: 'VB', colour: 'bg-blue-400 text-white' },
-                        { label: 'V', colour: 'bg-purple-500 text-white' },
-                        { label: 'VT', colour: 'bg-orange-400 text-white' },
-                        { label: 'T', colour: 'bg-orange-500 text-white' },
-                      ]
-                      // Show current position label
                       let currentLabel = 'V'
                       let currentColour = 'bg-purple-500 text-white'
                       if (p === 0) { currentLabel = 'B'; currentColour = 'bg-blue-500 text-white' }
@@ -341,9 +341,9 @@ export function ProfileView({
             <div className="space-y-1.5">
               <FieldLabel label="Preferences" />
               <div className="flex flex-wrap gap-1.5">
-                {appConfig.preferences.map(cat => {
+                {appConfig.preferences.map((cat: any) => {
                   const currentVal = draft.preferences[cat.key] || cat.defaultValue
-                  const currentOpt = cat.options.find(o => o.value === currentVal)
+                  const currentOpt = cat.options.find((o: any) => o.value === currentVal)
                   return (
                     <button key={cat.key} onClick={() => cyclePreference(cat)}
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold nav-press transition-all ${currentOpt?.colour || 'bg-[#1A1A1A] text-[#8E8E93] border border-[#2C2C2E]'}`}
