@@ -1,128 +1,136 @@
+// packages/@dating/ui/src/components/PreferenceFilter.tsx
 import React from 'react';
+import { PreferenceFilterConfig } from '../types/preferenceFilters';
 import { Lock } from 'lucide-react';
-import { cn } from '@dating/core';
-import type { PreferenceFilterConfig, PreferenceOption } from '../../dating-core/types/preferenceFilters';
 
 interface PreferenceFilterProps {
   config: PreferenceFilterConfig;
-  value: any;
+  currentValue: any;
   onChange: (value: any) => void;
-  showLock: boolean;
-  onLockedFilterClick: () => void;
+  size?: 'xs' | 'sm' | 'md';
+  showLock?: boolean;
+  onLockedFilterClick?: () => void;
 }
 
 export const PreferenceFilter: React.FC<PreferenceFilterProps> = ({
   config,
-  value,
+  currentValue,
   onChange,
-  showLock,
+  size = 'sm',
+  showLock = false,
   onLockedFilterClick,
 }) => {
-  const isSlider = config.inputType === 'slider';
-  const isTag = config.inputType === 'tag';
-  const isCheckbox = config.inputType === 'checkbox';
-
-  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (showLock) {
-      onLockedFilterClick();
-      return;
-    }
-    onChange(parseFloat(e.target.value));
+  const sizeClasses = {
+    xs: 'text-xs px-2 py-0.5',
+    sm: 'text-sm px-3 py-1',
+    md: 'text-base px-4 py-1.5',
   };
 
-  const handleTagClick = (optValue: string) => {
-    if (showLock && !config.unlocked) {
-      onLockedFilterClick();
+  const isLocked = !config.unlocked;
+
+  const handleChange = (value: any) => {
+    if (isLocked) {
+      onLockedFilterClick?.();
       return;
     }
-    onChange(optValue);
+    onChange(value);
   };
 
+  // === SLIDER (for Role - 0 to 1 spectrum) ===
+  if (config.inputType === 'slider') {
+    const sliderValue = typeof currentValue === 'number' ? currentValue : 0.5;
+    // Side is only allowed when slider is exactly at 0.5 (middle)
+    const isSideDisabled = sliderValue !== 0.5;
+
+    return (
+      <div className="flex flex-col gap-1 min-w-[160px]">
+        <div className="flex items-center justify-between text-[#8E8E93] text-xs">
+          <span>{config.label}</span>
+          {showLock && isLocked && <Lock className="w-3 h-3" />}
+        </div>
+
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.1}
+          value={sliderValue}
+          onChange={(e) => handleChange(parseFloat(e.target.value))}
+          disabled={isLocked}
+          className="w-full accent-white"
+        />
+
+        <div className="flex justify-between text-[10px] text-[#8E8E93]">
+          <span>0</span>
+          <span>0.5</span>
+          <span>1</span>
+        </div>
+
+        {/* Side Checkbox - disabled unless slider is at 0.5 */}
+        {config.options?.some(o => o.value === 'side') && (
+          <label className={`flex items-center gap-1.5 text-xs mt-1 ${isSideDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
+            <input
+              type="checkbox"
+              checked={currentValue === 'side'}
+              onChange={() => handleChange('side')}
+              disabled={isLocked || isSideDisabled}
+            />
+            Side
+          </label>
+        )}
+      </div>
+    );
+  }
+
+  // === TAG style (default for most preferences) ===
   return (
-    <div className="flex flex-col gap-2 p-3 bg-[#1C1C1E] rounded-xl border border-[#2C2C2E]">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-[#8E8E93]">{config.label}</span>
-        {showLock && <Lock className="w-3.5 h-3.5 text-[#FFD60A]" />}
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1 text-[#8E8E93] text-xs">
+        <span>{config.label}</span>
+        {showLock && isLocked && <Lock className="w-3 h-3" />}
       </div>
 
-      {isSlider && (
-        <div className="flex flex-col gap-3">
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={value}
-            onChange={handleSliderChange}
-            className={cn(
-              "w-full h-1.5 bg-[#2C2C2E] rounded-lg appearance-none cursor-pointer accent-[#FFD60A]",
-              showLock && "opacity-50"
-            )}
-          />
-          <div className="flex justify-between text-[10px] text-[#8E8E93]">
-            {config.options.map((opt) => (
-              <span key={opt.value}>{opt.label}</span>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {/* Allow All / Group option (e.g. "Any", "Party") */}
+        {config.allowAll && (
+          <button
+            onClick={() => handleChange('all')}
+            disabled={isLocked}
+            className={`${sizeClasses[size]} rounded-full border transition-all ${
+              currentValue === 'all' 
+                ? 'bg-white text-black border-white' 
+                : 'bg-transparent text-white border-white/30 hover:border-white/60'
+            }`}
+          >
+            {config.allowAll.label}
+          </button>
+        )}
 
-      {isTag && (
-        <div className="flex flex-wrap gap-2">
-          {config.allowAll && (
-            <button
-              onClick={() => handleTagClick('all')}
-              className={cn(
-                "px-3 py-1 rounded-full text-xs font-medium transition-all",
-                value === 'all' 
-                  ? "bg-[#FFD60A] text-black" 
-                  : "bg-[#2C2C2E] text-[#8E8E93] hover:bg-[#3A3A3C]"
-              )}
-            >
-              {config.allowAll.label}
-            </button>
-          )}
-          {config.options.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => handleTagClick(opt.value)}
-              className={cn(
-                "px-3 py-1 rounded-full text-xs font-medium transition-all",
-                value === opt.value 
-                  ? "bg-[#FFD60A] text-black" 
-                  : "bg-[#2C2C2E] text-[#8E8E93] hover:bg-[#3A3A3C]",
-                showLock && !config.unlocked && "opacity-50"
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
+        {/* Regular options */}
+        {config.options?.map((option) => {
+          const isActive = currentValue === option.value;
+          const optionLocked = option.unlocked === false && !config.unlocked;
 
-      {isCheckbox && (
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={!!value}
-            onChange={(e) => {
-              if (showLock) {
-                onLockedFilterClick();
-                return;
-              }
-              onChange(e.target.checked);
-            }}
-            disabled={config.type === 'side' && typeof value === 'number' && value !== 0.5}
-            className="w-4 h-4 rounded border-[#2C2C2E] bg-[#2C2C2E] text-[#FFD60A] focus:ring-0"
-          />
-          <span className={cn(
-            "text-xs",
-            config.type === 'side' && typeof value === 'number' && value !== 0.5 ? "text-[#48484A]" : "text-[#8E8E93]"
-          )}>
-            {config.label}
-          </span>
-        </div>
-      )}
+          return (
+            <button
+              key={option.value}
+              onClick={() => handleChange(option.value)}
+              disabled={isLocked || optionLocked}
+              className={`${sizeClasses[size]} rounded-full border transition-all ${
+                isActive 
+                  ? 'bg-white text-black border-white' 
+                : 'bg-transparent text-white border-white/30 hover:border-white/60'
+              } ${optionLocked ? 'opacity-40' : ''}`}
+              style={{
+                backgroundColor: isActive ? (option.colour || config.colour) : undefined,
+                borderColor: isActive ? (option.colour || config.colour) : undefined,
+              }}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };
