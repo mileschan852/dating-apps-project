@@ -20,16 +20,6 @@ export function isUserActive(user: any): boolean {
 /**
  * Check if user is an admin
  */
-export function isAdminUser(
-  user: any, 
-  adminIds: number[] = [], 
-  adminUsernames: string[] = []
-): boolean {
-  if (!user) return false;
-  if (adminIds.includes(user.id)) return true;
-  if (user.username && adminUsernames.includes(user.username)) return true;
-  return false;
-}
 
 // =====================================================
 // DATA TRANSFORMATION

@@ -1,5 +1,3 @@
-// @dating/core hooks - organized into separate files
-
 export * from './hooks/usePurchase';
 export * from './hooks/useGridUnlock';
 export * from './hooks/useInvisibleMode';
@@ -17,6 +15,5 @@ export * from './hooks/useAdminRecheck';
 export * from './hooks/useChannelFollow';
 export * from './hooks/useSyncUnlockStatus';
 export * from './hooks/useGridFilters';
-
-// Note: The original large implementations have been moved.
-// This file now serves as the main entry point for all hooks.
+export * from './hooks/useFilters';
+export * from './hooks/usePhotoInit';

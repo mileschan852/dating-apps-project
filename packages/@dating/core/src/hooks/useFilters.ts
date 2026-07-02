@@ -1,30 +1,42 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import type { PreferenceFilterConfig } from '../types/preferenceFilters';
 
-export function useFilters({ config }: { config: any }) {
-  const [onlineOnly, setOnlineOnly] = useState(false);
-  const [hasPicOnly, setHasPicOnly] = useState(false);
-  const [preferences, setPreferences] = useState(() => {
-    const initial: any = {};
-    Object.keys(config).forEach(key => {
-      const f = config[key];
-      initial[key] = f.default ?? (f.allowAll ? 'all' : f.options?.[0]?.value);
+export function useFilters(
+  configs: PreferenceFilterConfig[],
+  hasFilterUnlockSubscription: boolean
+) {
+  const initialValues = useMemo(() => {
+    const vals: Record<string, any> = {};
+    configs.forEach(config => {
+      vals[config.type] = config.default;
     });
-    return initial;
-  });
+    return vals;
+  }, [configs]);
 
-  const toggleOnline = () => setOnlineOnly(!onlineOnly);
-  const toggleHasPic = () => setHasPicOnly(!hasPicOnly);
+  const [values, setValues] = useState<Record<string, any>>(initialValues);
 
-  const setPreference = (key: string, value: any) => {
-    setPreferences(prev => ({ ...prev, [key]: value }));
-  };
+  const setFilter = useCallback((key: string, value: any) => {
+    const config = configs.find(c => c.type === key);
+    if (!config) return;
+
+    // Block switching to locked options unless user has subscription
+    if (!config.unlocked && !hasFilterUnlockSubscription) {
+      return;
+    }
+
+    setValues(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  }, [configs, hasFilterUnlockSubscription]);
+
+  const resetFilters = useCallback(() => {
+    setValues(initialValues);
+  }, [initialValues]);
 
   return {
-    onlineOnly,
-    hasPicOnly,
-    toggleOnline,
-    toggleHasPic,
-    preferences,
-    setPreference,
+    values,
+    setFilter,
+    resetFilters
   };
 }

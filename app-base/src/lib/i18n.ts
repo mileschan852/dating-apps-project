@@ -1,5 +1,5 @@
 // App-specific i18n — extend with your app's translations
-import { t as baseT, type Lang } from '@dating/core/i18n'
+import { t as baseT, type Lang } from '../dating-core/i18n'
 
 export type { Lang }
 

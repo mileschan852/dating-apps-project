@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Send, Grid3X3, Users, Gift, Wallet } from 'lucide-react'
-import { t, type Lang } from '@dating/core/i18n'
+import { t, type Lang } from '../dating-core/i18n'
 
 interface BottomNavProps {
   lang: Lang

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { type Lang } from '@dating/core/i18n'
+import { type Lang } from '../dating-core/i18n'
 
 export interface TipsRowProps {
   lang: Lang

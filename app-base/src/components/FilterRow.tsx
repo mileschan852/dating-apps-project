@@ -1,5 +1,6 @@
 import React from 'react';
-import { ToggleButton } from '@dating/ui';
+import { FilterButton } from '@dating/ui';
+import { Circle, Camera } from 'lucide-react';
 
 export interface FilterRowProps {
   onlineOnly: boolean;
@@ -10,10 +11,6 @@ export interface FilterRowProps {
   children?: React.ReactNode;
 }
 
-/**
- * Template filter row — always shows Online and Has Pic toggles.
- * Apps can inject additional preference filters via `children`.
- */
 export function FilterRow({
   onlineOnly,
   hasPicOnly,
@@ -23,20 +20,22 @@ export function FilterRow({
 }: FilterRowProps) {
   return (
     <div className="px-3 py-1.5 flex items-center gap-1.5 flex-wrap overflow-x-auto scrollbar-hide">
-      <ToggleButton
-        active={onlineOnly}
+      <FilterButton
+        label="Online"
+        isActive={onlineOnly}
         onClick={onToggleOnline}
-        title="Show online users only"
-      >
-        🟢 Online
-      </ToggleButton>
-      <ToggleButton
-        active={hasPicOnly}
+        activeIcon={<Circle className="w-3 h-3 fill-green-500 text-green-500" />}
+        inactiveIcon={<Circle className="w-3 h-3 fill-gray-500 text-gray-500" />}
+        size="sm"
+      />
+      <FilterButton
+        label="Has Pic"
+        isActive={hasPicOnly}
         onClick={onToggleHasPic}
-        title="Show users with verified photo only"
-      >
-        📷 Has Pic
-      </ToggleButton>
+        activeIcon={<Camera className="w-3.5 h-3.5" />}
+        inactiveIcon={<Camera className="w-3.5 h-3.5 opacity-60" />}
+        size="sm"
+      />
       {children}
     </div>
   );

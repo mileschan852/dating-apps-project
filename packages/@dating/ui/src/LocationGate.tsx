@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MapPin } from 'lucide-react'
-import { t, type Lang } from '@dating/core/i18n'
-import { getTg } from '@dating/core/telegram'
+import { t, type Lang } from '../dating-core/i18n'
+import { getTg } from '../dating-core/telegram'
 
 export function LocationGate({ onGranted, lang }: { onGranted: (lat: number, lng: number) => void; lang: Lang }) {
   const [status, setStatus] = useState<'idle' | 'requesting' | 'denied' | 'error'>('idle')
