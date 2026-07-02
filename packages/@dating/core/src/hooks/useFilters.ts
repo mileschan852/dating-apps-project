@@ -1,4 +1,3 @@
-// packages/@dating/core/src/hooks/useFilters.ts
 import { useState, useCallback } from 'react';
 import type { PreferenceFiltersConfig } from '../types/preferenceFilters';
 
@@ -24,7 +23,6 @@ export function useFilters({
 
   const getInitialPreferences = (): Record<string, any> => {
     const prefs: Record<string, any> = {};
-
     Object.entries(config).forEach(([key, filter]) => {
       if (initialState.preferences?.[key] !== undefined) {
         prefs[key] = initialState.preferences[key];
@@ -36,7 +34,6 @@ export function useFilters({
         prefs[key] = filter.options[0].value;
       }
     });
-
     return prefs;
   };
 
@@ -50,14 +47,12 @@ export function useFilters({
       const filterConfig = config[key];
       if (!filterConfig) return;
 
-      // Block switching to locked options unless user has unlock subscription
       if (!hasFilterUnlockSubscription && filterConfig.options) {
         const targetOption = filterConfig.options.find((o) => o.value === value);
         if (targetOption?.unlocked === false) {
           return;
         }
       }
-
       setPreferences((prev) => ({ ...prev, [key]: value }));
     },
     [config, hasFilterUnlockSubscription]
