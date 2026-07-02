@@ -1,42 +1,82 @@
-import { useState, useCallback, useMemo } from 'react';
-import type { PreferenceFilterConfig } from '../types/preferenceFilters';
+// packages/@dating/core/src/hooks/useFilters.ts
+import { useState, useCallback } from 'react';
+import type { PreferenceFiltersConfig } from '../types/preferenceFilters';
 
-export function useFilters(
-  configs: PreferenceFilterConfig[],
-  hasFilterUnlockSubscription: boolean
-) {
-  const initialValues = useMemo(() => {
-    const vals: Record<string, any> = {};
-    configs.forEach(config => {
-      vals[config.type] = config.default;
+export interface FilterState {
+  onlineOnly: boolean;
+  hasPicOnly: boolean;
+  preferences: Record<string, any>;
+}
+
+interface UseFiltersOptions {
+  config: PreferenceFiltersConfig;
+  initialState?: Partial<FilterState>;
+  hasFilterUnlockSubscription?: boolean;
+}
+
+export function useFilters({
+  config,
+  initialState = {},
+  hasFilterUnlockSubscription = false,
+}: UseFiltersOptions) {
+  const [onlineOnly, setOnlineOnly] = useState(initialState.onlineOnly ?? false);
+  const [hasPicOnly, setHasPicOnly] = useState(initialState.hasPicOnly ?? false);
+
+  const getInitialPreferences = (): Record<string, any> => {
+    const prefs: Record<string, any> = {};
+
+    Object.entries(config).forEach(([key, filter]) => {
+      if (initialState.preferences?.[key] !== undefined) {
+        prefs[key] = initialState.preferences[key];
+      } else if (filter.default !== undefined) {
+        prefs[key] = filter.default;
+      } else if (filter.allowAll) {
+        prefs[key] = 'all';
+      } else if (filter.options && filter.options.length > 0) {
+        prefs[key] = filter.options[0].value;
+      }
     });
-    return vals;
-  }, [configs]);
 
-  const [values, setValues] = useState<Record<string, any>>(initialValues);
+    return prefs;
+  };
 
-  const setFilter = useCallback((key: string, value: any) => {
-    const config = configs.find(c => c.type === key);
-    if (!config) return;
+  const [preferences, setPreferences] = useState<Record<string, any>>(getInitialPreferences());
 
-    // Block switching to locked options unless user has subscription
-    if (!config.unlocked && !hasFilterUnlockSubscription) {
-      return;
-    }
+  const toggleOnline = useCallback(() => setOnlineOnly((prev) => !prev), []);
+  const toggleHasPic = useCallback(() => setHasPicOnly((prev) => !prev), []);
 
-    setValues(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  }, [configs, hasFilterUnlockSubscription]);
+  const setPreference = useCallback(
+    (key: string, value: any) => {
+      const filterConfig = config[key];
+      if (!filterConfig) return;
+
+      // Block switching to locked options unless user has unlock subscription
+      if (!hasFilterUnlockSubscription && filterConfig.options) {
+        const targetOption = filterConfig.options.find((o) => o.value === value);
+        if (targetOption?.unlocked === false) {
+          return;
+        }
+      }
+
+      setPreferences((prev) => ({ ...prev, [key]: value }));
+    },
+    [config, hasFilterUnlockSubscription]
+  );
 
   const resetFilters = useCallback(() => {
-    setValues(initialValues);
-  }, [initialValues]);
+    setOnlineOnly(false);
+    setHasPicOnly(false);
+    setPreferences(getInitialPreferences());
+  }, [config]);
 
   return {
-    values,
-    setFilter,
-    resetFilters
+    onlineOnly,
+    hasPicOnly,
+    toggleOnline,
+    toggleHasPic,
+    preferences,
+    setPreference,
+    resetFilters,
+    config,
   };
 }
